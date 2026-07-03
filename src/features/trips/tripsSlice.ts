@@ -6,10 +6,16 @@ export interface Trip {
   id: string;
   title: string;
   startDate: string;
+  country?: string;
+  city?: string;
+  budget?: number;
+  description?: string;
+  status?: string;
+  coverImage?: string;
   endDate: string;
-  days: number;
-  distance: number;
-  imageUrl: string;
+  days?: number;
+  distance?: number;
+  imageUrl?: string;
   createdAt: string;
 }
 
