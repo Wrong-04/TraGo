@@ -2,6 +2,7 @@ import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import { getStorage } from "firebase/storage";
+import { getAnalytics, isSupported } from "firebase/analytics";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBZsq6sj9xpO3hAM0hjGf317Xdt7a_W-gQ",
@@ -17,9 +18,18 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
+// Initialize Analytics only if supported (important for React Native)
+let analytics;
+isSupported().then((supported) => {
+  if (supported) {
+    analytics = getAnalytics(app);
+  }
+});
+
 // Khởi tạo các dịch vụ Firebase
 export const db = getFirestore(app);
 export const auth = getAuth(app);
 export const storage = getStorage(app);
 
+export { analytics };
 export default app;

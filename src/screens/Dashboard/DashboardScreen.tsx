@@ -1,55 +1,122 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
-import { Text, Button, Card, useTheme } from 'react-native-paper';
-import { signOut } from 'firebase/auth';
-import { auth } from '../../config/firebase';
+import { View, StyleSheet, ScrollView, Image } from 'react-native';
+import { Text, Card, useTheme, Avatar } from 'react-native-paper';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../features/store';
+import { ChevronRight } from 'lucide-react-native';
 
 export default function DashboardScreen() {
   const theme = useTheme();
   const user = useSelector((state: RootState) => state.auth.user);
 
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-    } catch (error) {
-      console.error('Logout error', error);
-    }
-  };
-
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <Text variant="headlineSmall" style={{ marginBottom: 16, fontWeight: 'bold' }}>
-        Xin chào, {user?.email || 'User'}!
-      </Text>
-
-      <Card style={styles.card}>
-        <Card.Content>
-          <Text variant="titleMedium">Tổng quan chuyến đi</Text>
-          <Text variant="bodyMedium" style={{ marginTop: 8 }}>
-            Bạn chưa có chuyến đi nào gần đây. Hãy tạo một hành trình mới nhé!
+    <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]} showsVerticalScrollIndicator={false}>
+      <View style={styles.header}>
+        <View>
+          <Text variant="headlineSmall" style={{ fontWeight: 'bold', color: theme.colors.onSurface }}>
+            Xin chào, {user?.displayName || user?.email?.split('@')[0] || 'User'} 👋
           </Text>
-        </Card.Content>
-        <Card.Actions>
-          <Button mode="contained" onPress={() => {}}>Thêm chuyến đi</Button>
-        </Card.Actions>
-      </Card>
+          <Text variant="bodyMedium" style={{ color: theme.colors.secondary, marginTop: 4 }}>
+            Hôm nay bạn muốn đi đâu?
+          </Text>
+        </View>
+        <Avatar.Image size={48} source={{ uri: user?.photoURL || 'https://i.pravatar.cc/150?img=68' }} />
+      </View>
 
-      <Button mode="outlined" onPress={handleLogout} style={{ marginTop: 24 }}>
-        Đăng xuất
-      </Button>
-    </View>
+      <View style={styles.statsGrid}>
+        <Card style={[styles.statCard, { backgroundColor: theme.colors.surface }]} mode="elevated" elevation={1}>
+          <Card.Content>
+            <Text variant="headlineMedium" style={{ color: theme.colors.primary, fontWeight: 'bold' }}>12</Text>
+            <Text variant="bodyMedium" style={{ color: theme.colors.secondary }}>Chuyến đi</Text>
+          </Card.Content>
+        </Card>
+        <Card style={[styles.statCard, { backgroundColor: theme.colors.surface }]} mode="elevated" elevation={1}>
+          <Card.Content>
+            <Text variant="headlineMedium" style={{ color: theme.colors.primary, fontWeight: 'bold' }}>58</Text>
+            <Text variant="bodyMedium" style={{ color: theme.colors.secondary }}>Địa điểm đã ghé</Text>
+          </Card.Content>
+        </Card>
+        <Card style={[styles.statCard, { backgroundColor: theme.colors.surface }]} mode="elevated" elevation={1}>
+          <Card.Content>
+            <Text variant="headlineMedium" style={{ color: '#10B981', fontWeight: 'bold' }}>5.482 <Text variant="titleMedium">km</Text></Text>
+            <Text variant="bodyMedium" style={{ color: theme.colors.secondary }}>Tổng quãng đường</Text>
+          </Card.Content>
+        </Card>
+        <Card style={[styles.statCard, { backgroundColor: theme.colors.surface }]} mode="elevated" elevation={1}>
+          <Card.Content>
+            <Text variant="headlineMedium" style={{ color: '#F59E0B', fontWeight: 'bold' }}>15</Text>
+            <Text variant="bodyMedium" style={{ color: theme.colors.secondary }}>Ảnh đã lưu</Text>
+          </Card.Content>
+        </Card>
+      </View>
+
+      <View style={styles.sectionHeader}>
+        <Text variant="titleLarge" style={{ fontWeight: 'bold', color: theme.colors.onSurface }}>
+          Chuyến đi gần nhất
+        </Text>
+      </View>
+
+      <Card style={styles.recentTripCard} mode="elevated" elevation={1}>
+        <View style={styles.recentTripRow}>
+          <Image source={{ uri: 'https://images.unsplash.com/photo-1559592413-7cec4d0cae2b?w=800' }} style={styles.recentTripImage} />
+          <View style={styles.recentTripInfo}>
+            <Text variant="titleMedium" style={{ fontWeight: 'bold' }}>Đà Nẵng - Hội An</Text>
+            <Text variant="bodySmall" style={{ color: theme.colors.secondary, marginVertical: 4 }}>
+              20/05 - 24/05/2024
+            </Text>
+            <Text variant="labelMedium" style={{ color: theme.colors.primary, fontWeight: 'bold' }}>4 ngày</Text>
+          </View>
+          <ChevronRight color={theme.colors.secondary} size={24} />
+        </View>
+      </Card>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 24,
-    paddingTop: 64, // SafeArea padding top
+    paddingHorizontal: 20,
   },
-  card: {
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 60,
+    paddingBottom: 24,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  statCard: {
+    width: '48%',
+    marginBottom: 16,
+    borderRadius: 16,
+  },
+  sectionHeader: {
     marginTop: 16,
+    marginBottom: 16,
+  },
+  recentTripCard: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: '#fff',
+    marginBottom: 40,
+  },
+  recentTripRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+  },
+  recentTripImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 12,
+  },
+  recentTripInfo: {
+    flex: 1,
+    marginLeft: 16,
   }
 });

@@ -35,7 +35,7 @@ export default function LoginScreen() {
     >
       <View style={styles.formContainer}>
         <Text variant="headlineMedium" style={{ color: theme.colors.primary, marginBottom: 8, fontWeight: 'bold' }}>
-          Smart Travel
+          TraGo
         </Text>
         <Text variant="bodyLarge" style={{ marginBottom: 24, color: theme.colors.secondary }}>
           Nhật ký Hành trình & Du lịch thông minh

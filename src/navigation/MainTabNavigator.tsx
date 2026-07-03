@@ -4,12 +4,10 @@ import { useTheme } from 'react-native-paper';
 import { Home, Map as MapIcon, Image as ImageIcon, User, Sparkles } from 'lucide-react-native';
 
 import DashboardScreen from '../screens/Dashboard/DashboardScreen';
-// Tạo các màn hình tạm thời để map vào Tab
-import { View, Text } from 'react-native';
-const TripsScreen = () => <View style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}><Text>Trips</Text></View>;
-const MapScreen = () => <View style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}><Text>Map</Text></View>;
-const GalleryScreen = () => <View style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}><Text>Gallery</Text></View>;
-const ProfileScreen = () => <View style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}><Text>Profile</Text></View>;
+import TripsScreen from '../screens/Trips/TripsScreen';
+import ProfileScreen from '../screens/Profile/ProfileScreen';
+import MapScreen from '../screens/Maps/MapScreen';
+import GalleryScreen from '../screens/Gallery/GalleryScreen';
 
 const Tab = createBottomTabNavigator();
 
