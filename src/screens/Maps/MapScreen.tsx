@@ -6,13 +6,7 @@ import MapView, { Marker, Polyline } from 'react-native-maps';
 export default function MapScreen() {
   const theme = useTheme();
 
-  // Dữ liệu mẫu
-  const routeCoordinates = [
-    { latitude: 21.0285, longitude: 105.8542 }, // Hanoi
-    { latitude: 20.2539, longitude: 105.9750 }, // Ninh Binh
-    { latitude: 19.8075, longitude: 105.7768 }, // Thanh Hoa
-    { latitude: 16.0470, longitude: 108.2062 }, // Da Nang
-  ];
+  const routeCoordinates: { latitude: number, longitude: number }[] = [];
 
   return (
     <View style={styles.container}>

@@ -8,6 +8,13 @@ import { ChevronRight } from 'lucide-react-native';
 export default function DashboardScreen() {
   const theme = useTheme();
   const user = useSelector((state: RootState) => state.auth.user);
+  const { items } = useSelector((state: RootState) => state.trips);
+
+  const totalTrips = 12;
+  const totalLocations = 58;
+  const totalDistance = 5482;
+  const totalPhotos = 356;
+  const recentTrip = items.length > 0 ? items[0] : null;
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]} showsVerticalScrollIndicator={false}>
@@ -26,25 +33,25 @@ export default function DashboardScreen() {
       <View style={styles.statsGrid}>
         <Card style={[styles.statCard, { backgroundColor: theme.colors.surface }]} mode="elevated" elevation={1}>
           <Card.Content>
-            <Text variant="headlineMedium" style={{ color: theme.colors.primary, fontWeight: 'bold' }}>12</Text>
+            <Text variant="headlineMedium" style={{ color: theme.colors.primary, fontWeight: 'bold' }}>{totalTrips}</Text>
             <Text variant="bodyMedium" style={{ color: theme.colors.secondary }}>Chuyến đi</Text>
           </Card.Content>
         </Card>
         <Card style={[styles.statCard, { backgroundColor: theme.colors.surface }]} mode="elevated" elevation={1}>
           <Card.Content>
-            <Text variant="headlineMedium" style={{ color: theme.colors.primary, fontWeight: 'bold' }}>58</Text>
+            <Text variant="headlineMedium" style={{ color: theme.colors.primary, fontWeight: 'bold' }}>{totalLocations}</Text>
             <Text variant="bodyMedium" style={{ color: theme.colors.secondary }}>Địa điểm đã ghé</Text>
           </Card.Content>
         </Card>
         <Card style={[styles.statCard, { backgroundColor: theme.colors.surface }]} mode="elevated" elevation={1}>
           <Card.Content>
-            <Text variant="headlineMedium" style={{ color: '#10B981', fontWeight: 'bold' }}>5.482 <Text variant="titleMedium">km</Text></Text>
+            <Text variant="headlineMedium" style={{ color: '#10B981', fontWeight: 'bold' }}>{totalDistance.toLocaleString('vi-VN')} <Text variant="titleMedium">km</Text></Text>
             <Text variant="bodyMedium" style={{ color: theme.colors.secondary }}>Tổng quãng đường</Text>
           </Card.Content>
         </Card>
         <Card style={[styles.statCard, { backgroundColor: theme.colors.surface }]} mode="elevated" elevation={1}>
           <Card.Content>
-            <Text variant="headlineMedium" style={{ color: '#F59E0B', fontWeight: 'bold' }}>15</Text>
+            <Text variant="headlineMedium" style={{ color: '#F59E0B', fontWeight: 'bold' }}>{totalPhotos}</Text>
             <Text variant="bodyMedium" style={{ color: theme.colors.secondary }}>Ảnh đã lưu</Text>
           </Card.Content>
         </Card>
@@ -58,13 +65,18 @@ export default function DashboardScreen() {
 
       <Card style={styles.recentTripCard} mode="elevated" elevation={1}>
         <View style={styles.recentTripRow}>
-          <Image source={{ uri: 'https://images.unsplash.com/photo-1559592413-7cec4d0cae2b?w=800' }} style={styles.recentTripImage} />
+          <Image 
+            source={{ uri: recentTrip?.coverImage || recentTrip?.imageUrl || 'https://images.unsplash.com/photo-1559592413-7cec4d0cae2b?w=800' }} 
+            style={styles.recentTripImage} 
+          />
           <View style={styles.recentTripInfo}>
-            <Text variant="titleMedium" style={{ fontWeight: 'bold' }}>Đà Nẵng - Hội An</Text>
+            <Text variant="titleMedium" style={{ fontWeight: 'bold' }} numberOfLines={1}>{recentTrip?.title || 'Chưa có chuyến đi'}</Text>
             <Text variant="bodySmall" style={{ color: theme.colors.secondary, marginVertical: 4 }}>
-              20/05 - 24/05/2024
+              {recentTrip ? `${recentTrip.startDate} - ${recentTrip.endDate}` : 'Hãy thêm chuyến đi mới'}
             </Text>
-            <Text variant="labelMedium" style={{ color: theme.colors.primary, fontWeight: 'bold' }}>4 ngày</Text>
+            <Text variant="labelMedium" style={{ color: theme.colors.primary, fontWeight: 'bold' }}>
+              {recentTrip ? recentTrip.city : ''}
+            </Text>
           </View>
           <ChevronRight color={theme.colors.secondary} size={24} />
         </View>

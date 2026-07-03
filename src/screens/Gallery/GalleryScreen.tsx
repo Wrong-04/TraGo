@@ -5,17 +5,7 @@ import { Text, useTheme, SegmentedButtons } from 'react-native-paper';
 const { width } = Dimensions.get('window');
 const IMAGE_SIZE = (width - 40 - 16) / 3; // 3 columns, padding 20px on sides, gap 8px
 
-const MOCK_IMAGES = [
-  'https://images.unsplash.com/photo-1559592413-7cec4d0cae2b?w=400',
-  'https://images.unsplash.com/photo-1557335200-a65f7f032602?w=400',
-  'https://images.unsplash.com/photo-1557456170-0cf4f4d0d362?w=400',
-  'https://images.unsplash.com/photo-1518182170546-076616fdfaaf?w=400',
-  'https://images.unsplash.com/photo-1493246507139-91e8fad9978e?w=400',
-  'https://images.unsplash.com/photo-1506461883276-594a12b11dc3?w=400',
-  'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=400',
-  'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=400',
-  'https://images.unsplash.com/photo-1510414842594-a61c69b5ae57?w=400',
-];
+const MOCK_IMAGES: string[] = [];
 
 export default function GalleryScreen() {
   const theme = useTheme();

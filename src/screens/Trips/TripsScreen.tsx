@@ -7,7 +7,7 @@ import { RootState, AppDispatch } from '../../features/store';
 import { fetchTrips, Trip } from '../../features/trips/tripsSlice';
 
 export default function TripsScreen() {
-  const theme = useTheme();
+  const theme = useTheme() as any;
   const dispatch = useDispatch<AppDispatch>();
   const { items, isLoading, error } = useSelector((state: RootState) => state.trips);
 
@@ -17,7 +17,7 @@ export default function TripsScreen() {
 
   const renderTripCard = ({ item }: { item: Trip }) => (
     <Card style={styles.card} mode="elevated" elevation={1}>
-      <Card.Cover source={{ uri: item.imageUrl }} style={styles.cardCover} />
+      <Card.Cover source={{ uri: item.coverImage || item.imageUrl }} style={styles.cardCover} />
       <Card.Content style={styles.cardContent}>
         <View style={styles.cardHeader}>
           <Text variant="titleMedium" style={{ fontWeight: 'bold', color: theme.colors.onSurface }}>
@@ -29,18 +29,18 @@ export default function TripsScreen() {
         <View style={styles.infoRow}>
           <Calendar color={theme.colors.secondary} size={16} />
           <Text variant="bodySmall" style={[styles.infoText, { color: theme.colors.secondary }]}>
-            {item.startDate} - {item.endDate}
+            {`${item.startDate} - ${item.endDate}`}
           </Text>
         </View>
 
         <View style={styles.bottomRow}>
           <Text variant="labelMedium" style={{ color: theme.colors.primary, fontWeight: 'bold' }}>
-            {item.days} ngày
+            {item.status === 'Completed' ? 'Đã hoàn thành' : 'Sắp tới'}
           </Text>
           <View style={styles.distanceRow}>
             <MapPin color={theme.colors.secondary} size={16} />
             <Text variant="labelMedium" style={{ color: theme.colors.secondary, marginLeft: 4 }}>
-              {item.distance} km
+              {`${item.distance} km`}
             </Text>
           </View>
         </View>
@@ -60,7 +60,7 @@ export default function TripsScreen() {
       {isLoading ? (
         <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginTop: 40 }} />
       ) : error ? (
-        <Text style={{ textAlign: 'center', marginTop: 40, color: theme.colors.error }}>Lỗi: {error}</Text>
+        <Text style={{ textAlign: 'center', marginTop: 40, color: theme.colors.error }}>{`Lỗi: ${error}`}</Text>
       ) : (
         <FlatList
           data={items}

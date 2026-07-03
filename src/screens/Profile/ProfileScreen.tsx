@@ -5,11 +5,15 @@ import { useSelector } from 'react-redux';
 import { RootState } from '../../features/store';
 import { signOut } from 'firebase/auth';
 import { auth } from '../../config/firebase';
-import { MapPin, Settings, Bell, ShieldOutline, HelpCircle } from 'lucide-react-native';
+import { MapPin, Settings, HelpCircle, Shield, LogOut } from 'lucide-react-native';
 
 export default function ProfileScreen() {
   const theme = useTheme();
   const user = useSelector((state: RootState) => state.auth.user);
+  
+  const totalTrips = 12;
+  const totalLocations = 58;
+  const totalDistance = 5482;
 
   const handleLogout = async () => {
     try {
@@ -32,18 +36,18 @@ export default function ProfileScreen() {
 
         <View style={styles.statsContainer}>
           <View style={styles.statItem}>
-            <Text variant="titleMedium" style={{ fontWeight: 'bold' }}>12</Text>
+            <Text variant="titleMedium" style={{ fontWeight: 'bold' }}>{totalTrips}</Text>
             <Text variant="bodySmall" style={{ color: theme.colors.secondary }}>Chuyến đi</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text variant="titleMedium" style={{ fontWeight: 'bold' }}>58</Text>
+            <Text variant="titleMedium" style={{ fontWeight: 'bold' }}>{totalLocations}</Text>
             <Text variant="bodySmall" style={{ color: theme.colors.secondary }}>Địa điểm</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text variant="titleMedium" style={{ fontWeight: 'bold' }}>5.482</Text>
-            <Text variant="bodySmall" style={{ color: theme.colors.secondary }}>Quãng đường</Text>
+            <Text variant="titleMedium" style={{ fontWeight: 'bold' }}>{totalDistance.toLocaleString('vi-VN')}</Text>
+            <Text variant="bodySmall" style={{ color: theme.colors.secondary }}>Quãng đường (km)</Text>
           </View>
         </View>
       </View>
@@ -56,8 +60,8 @@ export default function ProfileScreen() {
         />
         <Divider />
         <List.Item
-          title="Chuyến đi đã lưu"
-          left={props => <List.Icon {...props} icon="bookmark-outline" />}
+          title="Quyền riêng tư"
+          left={props => <List.Icon {...props} icon={() => <Shield color="#64748B" size={24} />} />}
           right={props => <List.Icon {...props} icon="chevron-right" />}
         />
         <Divider />
@@ -77,9 +81,8 @@ export default function ProfileScreen() {
       <Button 
         mode="outlined" 
         onPress={handleLogout} 
-        style={styles.logoutBtn}
         textColor={theme.colors.error}
-        style={{ borderColor: theme.colors.error, marginHorizontal: 20, marginBottom: 40 }}
+        style={[styles.logoutBtn, { borderColor: theme.colors.error, marginHorizontal: 20, marginBottom: 40 }]}
       >
         Đăng xuất
       </Button>
