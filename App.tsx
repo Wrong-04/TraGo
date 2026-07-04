@@ -4,10 +4,10 @@ import { PaperProvider } from 'react-native-paper';
 import { NavigationContainer } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { onAuthStateChanged } from 'firebase/auth';
+// Firebase auth removed
 
 import { store } from './src/features/store';
-import { auth } from './src/config/firebase';
+import { supabase } from './src/config/supabase';
 import { setUser, setLoading } from './src/features/auth/authSlice';
 import { lightTheme } from './src/constants/theme';
 import RootNavigator from './src/navigation/RootNavigator';
@@ -32,20 +32,33 @@ function AppContent() {
   const dispatch = store.dispatch;
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
         dispatch(setUser({
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName,
-          photoURL: user.photoURL,
+          uid: session.user.id,
+          email: session.user.email || null,
+          displayName: session.user.user_metadata?.display_name || null,
+          photoURL: session.user.user_metadata?.photo_url || null,
         }));
       } else {
         dispatch(setUser(null));
       }
     });
 
-    return () => unsubscribe();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        dispatch(setUser({
+          uid: session.user.id,
+          email: session.user.email || null,
+          displayName: session.user.user_metadata?.display_name || null,
+          photoURL: session.user.user_metadata?.photo_url || null,
+        }));
+      } else {
+        dispatch(setUser(null));
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, [dispatch]);
 
   return <RootNavigator />;

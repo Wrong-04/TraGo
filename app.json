@@ -13,11 +13,11 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.duann.trago"
     },
     "android": {
-      "package": "com.an.firebaseapp",
-      "googleServicesFile": "./google-services.json",
+      "package": "com.duann.trago",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -31,6 +31,9 @@
       "eas": {
         "projectId": "395c9d50-e839-4489-894f-28b730d69d9e"
       }
-    }
+    },
+    "plugins": [
+      "expo-web-browser"
+    ]
   }
 }
