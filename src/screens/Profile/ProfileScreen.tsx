@@ -2,22 +2,25 @@ import React from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text, Avatar, List, useTheme, Button, Divider } from 'react-native-paper';
 import { useSelector } from 'react-redux';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RootState } from '../../features/store';
-import { signOut } from 'firebase/auth';
-import { auth } from '../../config/firebase';
-import { MapPin, Settings, HelpCircle, Shield, LogOut } from 'lucide-react-native';
+import { supabase } from '../../config/supabase';
+import { User, Map, Image as ImageIcon, Bell, Settings } from 'lucide-react-native';
 
-export default function ProfileScreen() {
+export default function ProfileScreen({ navigation }: any) {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const user = useSelector((state: RootState) => state.auth.user);
+  const { items } = useSelector((state: RootState) => state.trips);
+  const { locations } = useSelector((state: RootState) => state.map);
   
-  const totalTrips = 12;
-  const totalLocations = 58;
-  const totalDistance = 5482;
+  const totalTrips = items.length;
+  const totalLocations = locations.length;
+  const totalDistance = items.reduce((sum, trip) => sum + (trip.distance || 0), 0);
 
   const handleLogout = async () => {
     try {
-      await signOut(auth);
+      await supabase.auth.signOut();
     } catch (error) {
       console.error('Logout error', error);
     }
@@ -25,7 +28,7 @@ export default function ProfileScreen() {
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]} showsVerticalScrollIndicator={false}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 20 }]}>
         <Avatar.Image size={80} source={{ uri: user?.photoURL || 'https://i.pravatar.cc/150?img=68' }} />
         <Text variant="titleLarge" style={[styles.name, { color: theme.colors.onSurface }]}>
           {user?.displayName || 'Nguyễn Văn Minh'}
@@ -47,7 +50,7 @@ export default function ProfileScreen() {
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Text variant="titleMedium" style={{ fontWeight: 'bold' }}>{totalDistance.toLocaleString('vi-VN')}</Text>
-            <Text variant="bodySmall" style={{ color: theme.colors.secondary }}>Quãng đường (km)</Text>
+            <Text variant="bodySmall" style={{ color: theme.colors.secondary }}>Quãng đường</Text>
           </View>
         </View>
       </View>
@@ -55,26 +58,33 @@ export default function ProfileScreen() {
       <View style={[styles.section, { backgroundColor: theme.colors.surface }]}>
         <List.Item
           title="Thông tin cá nhân"
-          left={props => <List.Icon {...props} icon="account-outline" />}
+          left={props => <List.Icon {...props} icon={() => <User color="#64748B" size={24} />} />}
           right={props => <List.Icon {...props} icon="chevron-right" />}
         />
         <Divider />
         <List.Item
-          title="Quyền riêng tư"
-          left={props => <List.Icon {...props} icon={() => <Shield color="#64748B" size={24} />} />}
+          title="Chuyến đi đã lưu"
+          left={props => <List.Icon {...props} icon={() => <Map color="#64748B" size={24} />} />}
           right={props => <List.Icon {...props} icon="chevron-right" />}
         />
         <Divider />
         <List.Item
           title="Ảnh đã lưu"
-          left={props => <List.Icon {...props} icon="image-outline" />}
+          left={props => <List.Icon {...props} icon={() => <ImageIcon color="#64748B" size={24} />} />}
+          right={props => <List.Icon {...props} icon="chevron-right" />}
+        />
+        <Divider />
+        <List.Item
+          title="Thông báo"
+          left={props => <List.Icon {...props} icon={() => <Bell color="#64748B" size={24} />} />}
           right={props => <List.Icon {...props} icon="chevron-right" />}
         />
         <Divider />
         <List.Item
           title="Cài đặt"
-          left={props => <List.Icon {...props} icon="cog-outline" />}
+          left={props => <List.Icon {...props} icon={() => <Settings color="#64748B" size={24} />} />}
           right={props => <List.Icon {...props} icon="chevron-right" />}
+          onPress={() => navigation.navigate('Settings')}
         />
       </View>
 
@@ -96,7 +106,6 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    paddingTop: 60,
     paddingBottom: 24,
   },
   name: {
