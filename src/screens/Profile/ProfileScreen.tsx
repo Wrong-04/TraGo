@@ -16,7 +16,7 @@ export default function ProfileScreen({ navigation }: any) {
   
   const totalTrips = items.length;
   const totalLocations = locations.length;
-  const totalDistance = items.reduce((sum, trip) => sum + (trip.distance || 0), 0);
+  const totalDistance = items.reduce((sum, trip) => sum + (trip.totalDistance || 0), 0);
 
   const handleLogout = async () => {
     try {
@@ -31,10 +31,10 @@ export default function ProfileScreen({ navigation }: any) {
       <View style={[styles.header, { paddingTop: insets.top + 20 }]}>
         <Avatar.Image size={80} source={{ uri: user?.photoURL || 'https://i.pravatar.cc/150?img=68' }} />
         <Text variant="titleLarge" style={[styles.name, { color: theme.colors.onSurface }]}>
-          {user?.displayName || 'Nguyễn Văn Minh'}
+          {user?.displayName || 'Người dùng'}
         </Text>
         <Text variant="bodyMedium" style={{ color: theme.colors.secondary }}>
-          {user?.email || 'minh.nguyen@email.com'}
+          {user?.email || ''}
         </Text>
 
         <View style={styles.statsContainer}>
