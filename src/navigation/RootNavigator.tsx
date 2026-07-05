@@ -7,6 +7,10 @@ import LoginScreen from '../screens/Auth/LoginScreen';
 import SplashScreen from '../screens/Splash/SplashScreen';
 import MainTabNavigator from './MainTabNavigator';
 
+import AddTripScreen from '../screens/Trips/AddTripScreen';
+import TripDetailScreen from '../screens/Trips/TripDetailScreen';
+// import AIPlannerScreen from '../screens/Trips/AIPlannerScreen'; // Tạm thời để sau
+
 const AuthStack = createNativeStackNavigator();
 const MainStack = createNativeStackNavigator();
 
@@ -20,6 +24,8 @@ export default function RootNavigator() {
   return user ? (
     <MainStack.Navigator screenOptions={{ headerShown: false }}>
       <MainStack.Screen name="MainTabs" component={MainTabNavigator} />
+      <MainStack.Screen name="AddTrip" component={AddTripScreen} />
+      <MainStack.Screen name="TripDetail" component={TripDetailScreen} />
     </MainStack.Navigator>
   ) : (
     <AuthStack.Navigator screenOptions={{ headerShown: false }}>

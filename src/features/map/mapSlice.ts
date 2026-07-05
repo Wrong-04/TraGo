@@ -1,6 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { collection, getDocs } from 'firebase/firestore';
-import { db } from '../../config/firebase';
+import { supabase } from '../../config/supabase';
 
 export interface Location {
   id: string;
@@ -8,9 +7,14 @@ export interface Location {
   name: string;
   latitude: number;
   longitude: number;
+  address?: string;
+  placeName?: string;
   visitDate: string;
+  distanceFromPrevious?: number;
+  travelTimeMinutes?: number;
   rating?: number;
-  note?: string;
+  review?: string;
+  orderIndex: number;
 }
 
 interface MapState {
@@ -27,13 +31,32 @@ const initialState: MapState = {
 
 export const fetchLocations = createAsyncThunk(
   'map/fetchLocations',
-  async (_, { rejectWithValue }) => {
+  async (tripId: string | undefined, { rejectWithValue }) => {
     try {
-      const locationsCol = collection(db, 'locations');
-      const snapshot = await getDocs(locationsCol);
-      const locationsList = snapshot.docs.map(doc => ({
+      let query = supabase
+        .from('trip_locations')
+        .select('*')
+        .order('order_index', { ascending: true });
+
+      if (tripId) query = query.eq('trip_id', tripId);
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      const locationsList = data.map(doc => ({
         id: doc.id,
-        ...doc.data()
+        tripId: doc.trip_id || '',
+        name: doc.name || 'Địa điểm',
+        latitude: doc.latitude || 0,
+        longitude: doc.longitude || 0,
+        address: doc.address,
+        placeName: doc.place_name,
+        visitDate: doc.visit_date || '',
+        distanceFromPrevious: doc.distance_from_previous || 0,
+        travelTimeMinutes: doc.travel_time_minutes || 0,
+        rating: doc.rating,
+        review: doc.review,
+        orderIndex: doc.order_index || 0,
       })) as Location[];
       return locationsList;
     } catch (error: any) {

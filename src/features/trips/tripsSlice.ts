@@ -15,19 +15,22 @@ export interface TripDay {
 export interface Trip {
   id: string;
   title: string;
-  startDate: string;
+  description?: string;
   country?: string;
   city?: string;
+  startDate: string;
+  endDate: string;
   budget?: number;
-  description?: string;
+  totalDistance?: number;
+  totalCost?: number;
   status?: string;
   coverImage?: string;
-  endDate: string;
-  days?: number;
-  distance?: number;
-  imageUrl?: string;
-  createdAt: string;
+  tags?: string[];
+  latitude?: number;
+  longitude?: number;
+  address?: string;
   itinerary?: TripDay[];
+  createdAt: string;
 }
 
 interface TripsState {
@@ -43,18 +46,26 @@ const initialState: TripsState = {
 };
 
 // Async thunk để lấy dữ liệu từ Supabase
-export const fetchTrips = createAsyncThunk('trips/fetchTrips', async (_, { rejectWithValue }) => {
+export const fetchTrips = createAsyncThunk('trips/fetchTrips', async (userId: string | undefined, { rejectWithValue }) => {
   try {
-    const { data, error } = await supabase.from('trips').select('*').order('created_at', { ascending: false });
+    let query = supabase.from('trips').select('*').order('created_at', { ascending: false });
+    if (userId) query = query.eq('user_id', userId);
+
+    const { data, error } = await query;
     if (error) throw error;
-    
+
     const trips: Trip[] = data.map(item => ({
       id: item.id,
       title: item.title,
+      description: item.description,
+      country: item.country,
+      city: item.city,
       startDate: item.start_date,
       endDate: item.end_date,
-      city: item.city,
-      distance: item.distance,
+      budget: item.budget,
+      totalDistance: item.total_distance,
+      totalCost: item.total_cost,
+      status: item.status,
       coverImage: item.cover_image,
       itinerary: item.itinerary,
       createdAt: item.created_at,

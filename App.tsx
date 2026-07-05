@@ -1,35 +1,31 @@
-import React, { useEffect } from 'react';
-import { Provider as ReduxProvider } from 'react-redux';
-import { PaperProvider } from 'react-native-paper';
-import { NavigationContainer } from '@react-navigation/native';
-import { StatusBar } from 'expo-status-bar';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
-// Firebase auth removed
-
-import { store } from './src/features/store';
+import React, { useEffect, useState } from 'react';
+import { Provider, useDispatch } from 'react-redux';
+import { store, AppDispatch } from './src/features/store';
 import { supabase } from './src/config/supabase';
-import { setUser, setLoading } from './src/features/auth/authSlice';
-import { lightTheme } from './src/constants/theme';
+import { setUser } from './src/features/auth/authSlice';
 import RootNavigator from './src/navigation/RootNavigator';
+import SplashScreen from './src/screens/Splash/SplashScreen';
+import { PaperProvider, MD3LightTheme } from 'react-native-paper';
+import { NavigationContainer } from '@react-navigation/native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 
-export default function App() {
-  return (
-    <ReduxProvider store={store}>
-      <PaperProvider theme={lightTheme}>
-        <SafeAreaProvider>
-          <NavigationContainer>
-            <AppContent />
-            <StatusBar style="auto" />
-          </NavigationContainer>
-        </SafeAreaProvider>
-      </PaperProvider>
-    </ReduxProvider>
-  );
-}
+const customTheme = {
+  ...MD3LightTheme,
+  colors: {
+    ...MD3LightTheme.colors,
+    primary: '#3B82F6',
+    secondary: '#64748b',
+    background: '#f8fafc',
+    surface: '#ffffff',
+    error: '#ef4444',
+  },
+};
 
-// Tách riêng AppContent để có thể truy cập Redux hooks
 function AppContent() {
-  const dispatch = store.dispatch;
+  const [sessionChecked, setSessionChecked] = useState(false);
+  const [splashFinished, setSplashFinished] = useState(false);
+  const dispatch = useDispatch<AppDispatch>();
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -37,12 +33,11 @@ function AppContent() {
         dispatch(setUser({
           uid: session.user.id,
           email: session.user.email || null,
-          displayName: session.user.user_metadata?.display_name || null,
-          photoURL: session.user.user_metadata?.photo_url || null,
+          displayName: session.user.user_metadata?.full_name || session.user.user_metadata?.display_name || null,
+          photoURL: session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture || null,
         }));
-      } else {
-        dispatch(setUser(null));
       }
+      setSessionChecked(true);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -50,8 +45,8 @@ function AppContent() {
         dispatch(setUser({
           uid: session.user.id,
           email: session.user.email || null,
-          displayName: session.user.user_metadata?.display_name || null,
-          photoURL: session.user.user_metadata?.photo_url || null,
+          displayName: session.user.user_metadata?.full_name || session.user.user_metadata?.display_name || null,
+          photoURL: session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture || null,
         }));
       } else {
         dispatch(setUser(null));
@@ -61,5 +56,24 @@ function AppContent() {
     return () => subscription.unsubscribe();
   }, [dispatch]);
 
+  if (!splashFinished || !sessionChecked) {
+    return <SplashScreen onFinish={() => setSplashFinished(true)} />;
+  }
+
   return <RootNavigator />;
+}
+
+export default function App() {
+  return (
+    <Provider store={store}>
+      <PaperProvider theme={customTheme}>
+        <SafeAreaProvider>
+          <NavigationContainer>
+            <AppContent />
+            <StatusBar style="auto" />
+          </NavigationContainer>
+        </SafeAreaProvider>
+      </PaperProvider>
+    </Provider>
+  );
 }

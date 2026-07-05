@@ -1,246 +1,353 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { Text, TextInput, Button, useTheme, ActivityIndicator, Snackbar, Chip } from 'react-native-paper';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, ScrollView, Platform, KeyboardAvoidingView, Image, TouchableOpacity, Dimensions } from 'react-native';
+import { Text, TextInput, useTheme, ActivityIndicator, Snackbar, Button, Chip, Portal, Dialog } from 'react-native-paper';
 import { useForm, Controller } from 'react-hook-form';
 import { useDispatch, useSelector } from 'react-redux';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { AppDispatch, RootState } from '../../features/store';
-import { generateTripPlan } from '../../config/gemini';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
+import { decode } from 'base64-arraybuffer';
+import { ArrowLeft, Calendar, Plus, MapPin, Map as MapIcon } from 'lucide-react-native';
+import MapView, { Marker } from 'react-native-maps';
 import { supabase } from '../../config/supabase';
-import { fetchTrips } from '../../features/trips/tripsSlice';
+import { AppDispatch, RootState } from '../../features/store';
+import { fetchTrips, Trip } from '../../features/trips/tripsSlice';
 
 type FormData = {
-  destination: string;
-  days: string;
+  title: string;
+  country: string;
+  city: string;
   budget: string;
-  interests: string;
+  description: string;
 };
 
-export default function AddTripScreen({ navigation }: any) {
-  const theme = useTheme();
+const AVAILABLE_TAGS = ['Biển', 'Núi', 'Ẩm thực', 'Check-in', 'Gia đình', 'Bạn bè'];
+
+export default function AddTripScreen({ route, navigation }: any) {
   const insets = useSafeAreaInsets();
   const dispatch = useDispatch<AppDispatch>();
   const user = useSelector((state: RootState) => state.auth.user);
-  const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
 
-  const { control, handleSubmit, formState: { errors } } = useForm<FormData>({
+  const tripToEdit: Trip | undefined = route.params?.trip;
+  const isEdit = !!tripToEdit;
+
+  const [startDate, setStartDate] = useState(tripToEdit ? new Date(tripToEdit.startDate) : new Date());
+  const [endDate, setEndDate] = useState(tripToEdit ? new Date(tripToEdit.endDate) : new Date(Date.now() + 3 * 86400000));
+  const [showStartDate, setShowStartDate] = useState(false);
+  const [showEndDate, setShowEndDate] = useState(false);
+  
+  const [coverImage, setCoverImage] = useState<string>(tripToEdit?.coverImage || 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800');
+  const [selectedTags, setSelectedTags] = useState<string[]>(tripToEdit?.tags || []);
+  
+  const [latitude, setLatitude] = useState<number | null>(tripToEdit?.latitude || null);
+  const [longitude, setLongitude] = useState<number | null>(tripToEdit?.longitude || null);
+  const [address, setAddress] = useState<string>(tripToEdit?.address || '');
+
+  const [mapModalVisible, setMapModalVisible] = useState(false);
+  const [tempCoordinate, setTempCoordinate] = useState<{latitude: number, longitude: number} | null>(null);
+
+  const [loading, setLoading] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarType, setSnackbarType] = useState<'success'|'error'>('success');
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
+
+  const { control, handleSubmit, setValue, formState: { errors } } = useForm<FormData>({
     defaultValues: {
-      destination: '',
-      days: '3',
-      budget: '5000000',
-      interests: 'Khám phá văn hoá, ẩm thực',
+      title: tripToEdit?.title || '',
+      country: tripToEdit?.country || 'Việt Nam',
+      city: tripToEdit?.city || '',
+      budget: tripToEdit?.budget ? tripToEdit.budget.toString() : '',
+      description: tripToEdit?.description || '',
     }
   });
 
+  const showSnackbar = (msg: string, type: 'success'|'error') => {
+    setSnackbarMessage(msg);
+    setSnackbarType(type);
+    setSnackbarVisible(true);
+  };
+
+  const toggleTag = (tag: string) => {
+    if (selectedTags.includes(tag)) {
+      setSelectedTags(selectedTags.filter(t => t !== tag));
+    } else {
+      setSelectedTags([...selectedTags, tag]);
+    }
+  };
+
+  const pickImage = async () => {
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [16, 9],
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      setCoverImage(result.assets[0].uri);
+    }
+  };
+
+  const uploadImageToSupabase = async (uri: string) => {
+    if (uri.startsWith('http')) return uri; 
+    try {
+      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
+      const fileName = `trips/${user?.uid}-${Date.now()}.jpg`;
+      const { data, error } = await supabase.storage
+        .from('trip-images')
+        .upload(fileName, decode(base64), { contentType: 'image/jpeg' });
+        
+      if (error) throw error;
+      const { data: publicUrlData } = supabase.storage.from('trip-images').getPublicUrl(fileName);
+      return publicUrlData.publicUrl;
+    } catch (error) {
+      console.log('Upload error:', error);
+      return uri; 
+    }
+  };
+
+  const openMapSelector = () => {
+    setMapModalVisible(true);
+  };
+
   const onSubmit = async (data: FormData) => {
     if (!user) {
-      setErrorMsg('Vui lòng đăng nhập để tạo chuyến đi.');
+      showSnackbar('Vui lòng đăng nhập để tiếp tục.', 'error');
       return;
     }
+    if (endDate < startDate) {
+      showSnackbar('Ngày kết thúc phải lớn hơn hoặc bằng ngày bắt đầu', 'error');
+      return;
+    }
+
     setLoading(true);
-    setErrorMsg('');
+
     try {
-      // 1. Gọi AI tạo lịch trình
-      const interestsArray = data.interests.split(',').map(i => i.trim());
-      const generatedData = await generateTripPlan(data.destination, parseInt(data.days), data.budget, interestsArray);
+      const uploadedImageUrl = await uploadImageToSupabase(coverImage);
       
-      // 2. Tạo record Trip mới
-      const newTrip = {
+      const tripData = {
         user_id: user.uid,
-        title: generatedData.title || `Khám phá ${data.destination}`,
-        city: data.destination,
-        start_date: new Date().toISOString().split('T')[0], // Mock ngày hôm nay
-        end_date: new Date(Date.now() + parseInt(data.days) * 86400000).toISOString().split('T')[0],
-        distance: generatedData.distance || Math.floor(Math.random() * 500) + 50,
-        cover_image: generatedData.coverImage || 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=800',
-        itinerary: generatedData.days || []
+        title: data.title,
+        description: data.description,
+        country: data.country,
+        city: data.city,
+        budget: data.budget ? parseFloat(data.budget) : 0,
+        start_date: startDate.toISOString().split('T')[0],
+        end_date: endDate.toISOString().split('T')[0],
+        cover_image: uploadedImageUrl,
+        status: isEdit ? tripToEdit.status : 'Upcoming',
       };
 
-      // 3. Đẩy lên Supabase
-      const { error: insertError } = await supabase.from('trips').insert([newTrip]);
-      if (insertError) throw insertError;
+      if (isEdit) {
+        const { error } = await supabase.from('trips').update(tripData).eq('id', tripToEdit.id);
+        if (error) throw error;
+        showSnackbar('Cập nhật chuyến đi thành công!', 'success');
+      } else {
+        const { error } = await supabase.from('trips').insert([tripData]);
+        if (error) throw error;
+        showSnackbar('Tạo chuyến đi thành công!', 'success');
+      }
 
-      // (Tuỳ chọn: có thể đẩy các ngày (days) vào journals, nhưng hiện tại ta tập trung đẩy Trip trước)
-
-      // 4. Update Redux & Navigate back
-      dispatch(fetchTrips());
-      navigation.goBack();
+      dispatch(fetchTrips(user.uid));
+      setTimeout(() => navigation.goBack(), 1000);
       
-    } catch (error: any) {
-      setErrorMsg(error.message || 'Có lỗi xảy ra khi tạo lịch trình bằng AI.');
-    } finally {
+    } catch (err: any) {
+      showSnackbar(err.message || 'Có lỗi xảy ra khi lưu chuyến đi.', 'error');
       setLoading(false);
     }
   };
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <View style={[styles.header, { paddingTop: insets.top + 20 }]}>
-        <Text variant="headlineMedium" style={{ fontWeight: 'bold', color: theme.colors.onSurface }}>
-          Tạo Lịch Trình AI
-        </Text>
-        <Text variant="bodyMedium" style={{ color: theme.colors.secondary, marginTop: 8 }}>
-          Nhập thông tin chuyến đi để Gemini lên kế hoạch chi tiết cho bạn!
-        </Text>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()} disabled={loading}>
+          <ArrowLeft color="#0F172A" size={24} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>{isEdit ? 'Sửa chuyến đi' : 'Thêm chuyến đi'}</Text>
+        <TouchableOpacity style={styles.headerBtn} onPress={handleSubmit(onSubmit)} disabled={loading}>
+          <Text style={styles.headerSave}>Lưu</Text>
+        </TouchableOpacity>
       </View>
 
-      <View style={styles.form}>
-        <Controller
-          control={control}
-          rules={{ required: 'Điểm đến không được để trống' }}
-          name="destination"
-          render={({ field: { onChange, onBlur, value } }) => (
-            <TextInput
-              mode="outlined"
-              label="Điểm đến (VD: Đà Lạt, Kyoto)"
-              onBlur={onBlur}
-              onChangeText={onChange}
-              value={value}
-              error={!!errors.destination}
-              style={styles.input}
-              outlineStyle={styles.inputOutline}
-            />
-          )}
-        />
-        {errors.destination && <Text style={{ color: theme.colors.error }}>{errors.destination.message}</Text>}
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.card}>
+          <Controller
+            control={control}
+            rules={{ required: 'Vui lòng nhập tên chuyến đi' }}
+            name="title"
+            render={({ field: { onChange, value } }) => (
+              <TextInput label="Tên chuyến đi *" value={value} onChangeText={onChange} mode="outlined" style={styles.input} error={!!errors.title} />
+            )}
+          />
 
-        <Controller
-          control={control}
-          rules={{ required: 'Số ngày không được để trống', pattern: /^\d+$/ }}
-          name="days"
-          render={({ field: { onChange, onBlur, value } }) => (
-            <TextInput
-              mode="outlined"
-              label="Số ngày (VD: 3)"
-              keyboardType="numeric"
-              onBlur={onBlur}
-              onChangeText={onChange}
-              value={value}
-              error={!!errors.days}
-              style={styles.input}
-              outlineStyle={styles.inputOutline}
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            <Controller
+              control={control}
+              name="country"
+              render={({ field: { onChange, value } }) => (
+                <TextInput label="Quốc gia" value={value} onChangeText={onChange} mode="outlined" style={[styles.input, { flex: 1 }]} />
+              )}
             />
-          )}
-        />
-
-        <Controller
-          control={control}
-          rules={{ required: 'Ngân sách dự kiến' }}
-          name="budget"
-          render={({ field: { onChange, onBlur, value } }) => (
-            <TextInput
-              mode="outlined"
-              label="Ngân sách (VNĐ, VD: 5000000)"
-              keyboardType="numeric"
-              onBlur={onBlur}
-              onChangeText={onChange}
-              value={value}
-              error={!!errors.budget}
-              style={styles.input}
-              outlineStyle={styles.inputOutline}
+            <Controller
+              control={control}
+              rules={{ required: 'Bắt buộc' }}
+              name="city"
+              render={({ field: { onChange, value } }) => (
+                <TextInput label="Thành phố *" value={value} onChangeText={onChange} mode="outlined" style={[styles.input, { flex: 1 }]} error={!!errors.city} />
+              )}
             />
-          )}
-        />
-
-        <Controller
-          control={control}
-          name="interests"
-          render={({ field: { onChange, onBlur, value } }) => (
-            <TextInput
-              mode="outlined"
-              label="Sở thích (VD: ẩm thực, thiên nhiên)"
-              onBlur={onBlur}
-              onChangeText={onChange}
-              value={value}
-              style={styles.input}
-              outlineStyle={styles.inputOutline}
-            />
-          )}
-        />
-
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.colors.primary} />
-            <Text style={{ marginTop: 12, color: theme.colors.secondary }}>Gemini đang tư duy...</Text>
           </View>
-        ) : (
-          <Button 
-            mode="contained" 
-            onPress={handleSubmit(onSubmit)} 
-            style={styles.btn}
-            contentStyle={{ paddingVertical: 8 }}
-          >
-            Tạo Lịch Trình Tự Động
-          </Button>
-        )}
 
-        <View style={styles.suggestionsContainer}>
-          <Text variant="titleMedium" style={{ fontWeight: 'bold', color: theme.colors.onSurface, marginBottom: 12 }}>
-            Gợi ý cho bạn
-          </Text>
-          <View style={styles.chipsWrapper}>
-            {['Trăng mật', 'Phượt mạo hiểm', 'Gia đình', 'Nghỉ dưỡng', 'Chụp ảnh'].map((tag, index) => (
-              <Chip key={index} style={styles.chip} textStyle={{ color: '#64748B' }}>
+          <TouchableOpacity onPress={() => setShowStartDate(true)} activeOpacity={0.8}>
+            <View pointerEvents="none">
+              <TextInput label="Ngày bắt đầu" value={startDate.toLocaleDateString('vi-VN')} mode="outlined" style={styles.input} editable={false} right={<TextInput.Icon icon={() => <Calendar color="#94A3B8" size={20} />} />} />
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={() => setShowEndDate(true)} activeOpacity={0.8}>
+            <View pointerEvents="none">
+              <TextInput label="Ngày kết thúc" value={endDate.toLocaleDateString('vi-VN')} mode="outlined" style={styles.input} editable={false} right={<TextInput.Icon icon={() => <Calendar color="#94A3B8" size={20} />} />} />
+            </View>
+          </TouchableOpacity>
+
+          <Controller
+            control={control}
+            rules={{ min: { value: 1, message: 'Ngân sách phải lớn hơn 0' } }}
+            name="budget"
+            render={({ field: { onChange, value } }) => (
+              <View>
+                <TextInput label="Ngân sách (VND)" value={value} onChangeText={onChange} mode="outlined" keyboardType="numeric" style={{ backgroundColor: '#fff', marginBottom: 8 }} error={!!errors.budget} />
+                <View style={styles.budgetChips}>
+                  {[2000000, 5000000, 10000000, 20000000].map(val => (
+                    <Chip 
+                      key={val} 
+                      selected={value === val.toString()} 
+                      onPress={() => onChange(val.toString())}
+                      style={value === val.toString() ? styles.budgetChipActive : styles.budgetChip}
+                      textStyle={value === val.toString() ? { color: '#fff' } : { color: '#64748B' }}
+                    >
+                      {val.toLocaleString('vi-VN')}đ
+                    </Chip>
+                  ))}
+                </View>
+              </View>
+            )}
+          />
+
+          <Controller
+            control={control}
+            name="description"
+            render={({ field: { onChange, value } }) => (
+              <TextInput label="Mô tả" value={value} onChangeText={onChange} mode="outlined" multiline numberOfLines={3} style={styles.input} />
+            )}
+          />
+
+          <Text style={styles.sectionTitle}>Vị trí chính</Text>
+          <Button mode="outlined" icon={() => <MapIcon color="#3B82F6" size={18} />} onPress={openMapSelector} style={styles.mapBtn}>
+            Chọn vị trí trên Google Maps
+          </Button>
+          {address || latitude ? (
+            <View style={styles.locationInfo}>
+              <Text style={{ fontWeight: 'bold', color: '#0F172A' }}>{address || 'Vị trí đã chọn'}</Text>
+              <Text style={{ color: '#64748B', fontSize: 12, marginTop: 4 }}>Lat: {latitude?.toFixed(4)} | Lng: {longitude?.toFixed(4)}</Text>
+            </View>
+          ) : null}
+
+          <Text style={styles.sectionTitle}>Danh sách Tags</Text>
+          <View style={styles.tagsContainer}>
+            {AVAILABLE_TAGS.map(tag => (
+              <Chip key={tag} selected={selectedTags.includes(tag)} onPress={() => toggleTag(tag)} style={[styles.tagChip, selectedTags.includes(tag) && styles.tagChipActive]} textStyle={{ color: selectedTags.includes(tag) ? '#fff' : '#64748B' }}>
                 {tag}
               </Chip>
             ))}
           </View>
-        </View>
-      </View>
 
-      <Snackbar
-        visible={!!errorMsg}
-        onDismiss={() => setErrorMsg('')}
-        action={{
-          label: 'Đóng',
-          onPress: () => setErrorMsg(''),
-        }}
-        style={{ backgroundColor: theme.colors.error }}
-      >
-        {errorMsg}
+          <Text style={styles.sectionTitle}>Ảnh bìa</Text>
+          <TouchableOpacity onPress={pickImage} activeOpacity={0.8} style={styles.coverImageContainer}>
+            <Image source={{ uri: coverImage }} style={styles.coverImage} />
+            <View style={styles.editImageOverlay}>
+              <Plus color="#fff" size={24} />
+              <Text style={{ color: '#fff', fontWeight: 'bold', marginLeft: 8 }}>Thay đổi ảnh</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        {showStartDate && (
+          <DateTimePicker value={startDate} mode="date" display="default" onChange={(event, date) => { setShowStartDate(Platform.OS === 'ios'); if (date) setStartDate(date); }} />
+        )}
+        {showEndDate && (
+          <DateTimePicker value={endDate} mode="date" display="default" onChange={(event, date) => { setShowEndDate(Platform.OS === 'ios'); if (date) setEndDate(date); }} />
+        )}
+      </ScrollView>
+
+      {/* Map Picker Modal */}
+      <Portal>
+        <Dialog visible={mapModalVisible} onDismiss={() => setMapModalVisible(false)} style={styles.mapDialog}>
+          <Dialog.Title>Chọn vị trí trên bản đồ</Dialog.Title>
+          <View style={styles.mapContainer}>
+            <MapView
+              style={{ flex: 1 }}
+              initialRegion={{ latitude: latitude || 16.0544, longitude: longitude || 108.2022, latitudeDelta: 0.1, longitudeDelta: 0.1 }}
+              onPress={(e) => setTempCoordinate(e.nativeEvent.coordinate)}
+            >
+              {(tempCoordinate || latitude) && (
+                <Marker coordinate={tempCoordinate || { latitude: latitude!, longitude: longitude! }} />
+              )}
+            </MapView>
+          </View>
+          <Dialog.Actions>
+            <Button onPress={() => setMapModalVisible(false)} textColor="#64748B">Hủy</Button>
+            <Button onPress={() => {
+              if (tempCoordinate) {
+                setLatitude(tempCoordinate.latitude);
+                setLongitude(tempCoordinate.longitude);
+                setAddress(`Tọa độ: ${tempCoordinate.latitude.toFixed(4)}, ${tempCoordinate.longitude.toFixed(4)}`);
+              }
+              setMapModalVisible(false);
+            }} mode="contained" style={{ backgroundColor: '#3B82F6' }}>Xác nhận</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
+      {/* Loading Overlay */}
+      {loading && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#3B82F6" />
+          <Text style={{ marginTop: 12, color: '#fff', fontWeight: 'bold' }}>Đang lưu...</Text>
+        </View>
+      )}
+
+      {/* Snackbar */}
+      <Snackbar visible={snackbarVisible} onDismiss={() => setSnackbarVisible(false)} duration={3000} style={{ backgroundColor: snackbarType === 'success' ? '#10B981' : '#EF4444' }}>
+        {snackbarMessage}
       </Snackbar>
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  header: {
-    paddingHorizontal: 20,
-    paddingBottom: 24,
-  },
-  form: {
-    paddingHorizontal: 20,
-    paddingBottom: 40,
-  },
-  input: {
-    marginBottom: 16,
-    backgroundColor: '#fff',
-  },
-  inputOutline: {
-    borderRadius: 12,
-  },
-  btn: {
-    marginTop: 24,
-    borderRadius: 8,
-  },
-  loadingContainer: {
-    marginTop: 32,
-    alignItems: 'center',
-  },
-  suggestionsContainer: {
-    marginTop: 32,
-  },
-  chipsWrapper: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  chip: {
-    backgroundColor: '#F1F5F9',
-    borderRadius: 16,
-  }
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  headerBtn: { padding: 8 },
+  headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#0F172A' },
+  headerSave: { fontSize: 16, fontWeight: 'bold', color: '#3B82F6' },
+  scrollContent: { padding: 16, paddingBottom: 40 },
+  card: { backgroundColor: '#fff', padding: 16, borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
+  input: { marginBottom: 16, backgroundColor: '#fff' },
+  budgetChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
+  budgetChip: { backgroundColor: '#F1F5F9' },
+  budgetChipActive: { backgroundColor: '#3B82F6' },
+  sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#0F172A', marginTop: 8, marginBottom: 12 },
+  mapBtn: { borderColor: '#3B82F6', borderRadius: 8, marginBottom: 12 },
+  locationInfo: { padding: 12, backgroundColor: '#F1F5F9', borderRadius: 8, marginBottom: 16 },
+  tagsContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 24 },
+  tagChip: { backgroundColor: '#F1F5F9' },
+  tagChipActive: { backgroundColor: '#3B82F6' },
+  coverImageContainer: { height: 180, borderRadius: 12, overflow: 'hidden', position: 'relative' },
+  coverImage: { width: '100%', height: '100%' },
+  editImageOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.3)', flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
+  loadingOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', zIndex: 999 },
+  mapDialog: { backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden' },
+  mapContainer: { height: 300, width: '100%', backgroundColor: '#F1F5F9' }
 });
