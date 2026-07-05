@@ -22,6 +22,7 @@ export interface Trip {
   endDate: string;
   budget?: number;
   totalDistance?: number;
+  totalLocations?: number;
   totalCost?: number;
   status?: string;
   coverImage?: string;
@@ -48,13 +49,13 @@ const initialState: TripsState = {
 // Async thunk để lấy dữ liệu từ Supabase
 export const fetchTrips = createAsyncThunk('trips/fetchTrips', async (userId: string | undefined, { rejectWithValue }) => {
   try {
-    let query = supabase.from('trips').select('*').order('created_at', { ascending: false });
+    let query = supabase.from('trips').select('*, trip_locations(id, distance_from_previous)').order('created_at', { ascending: false });
     if (userId) query = query.eq('user_id', userId);
 
     const { data, error } = await query;
     if (error) throw error;
 
-    const trips: Trip[] = data.map(item => ({
+    const trips: Trip[] = data.map((item: any) => ({
       id: item.id,
       title: item.title,
       description: item.description,
@@ -63,11 +64,15 @@ export const fetchTrips = createAsyncThunk('trips/fetchTrips', async (userId: st
       startDate: item.start_date,
       endDate: item.end_date,
       budget: item.budget,
-      totalDistance: item.total_distance,
+      totalDistance: item.trip_locations ? item.trip_locations.reduce((sum: number, loc: any) => sum + (loc.distance_from_previous || 0), 0) : 0,
+      totalLocations: item.trip_locations ? item.trip_locations.length : 0,
       totalCost: item.total_cost,
       status: item.status,
       coverImage: item.cover_image,
-      itinerary: item.itinerary,
+      tags: item.tags || [],
+      latitude: item.latitude,
+      longitude: item.longitude,
+      address: item.address,
       createdAt: item.created_at,
     }));
     return trips;

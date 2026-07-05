@@ -1,11 +1,16 @@
+
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { View, StyleSheet, FlatList, Image, TouchableOpacity, TextInput, RefreshControl, Animated, ScrollView } from 'react-native';
-import { Text, FAB, Menu, Portal, Dialog, Button } from 'react-native-paper';
-import { Search, ArrowLeft, Plus, MoreVertical, MapPin } from 'lucide-react-native';
+import { View, StyleSheet, FlatList, Image, TouchableOpacity, TextInput, RefreshControl, Animated, ScrollView, Dimensions } from 'react-native';
+import { Text, Menu, Portal, Dialog, Button } from 'react-native-paper';
+import { Search, ArrowLeft, Plus, MoreVertical, MapPin, Sparkles } from 'lucide-react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../features/store';
-import { fetchTrips, deleteTrip, Trip } from '../../features/trips/tripsSlice';
+import { fetchTrips, Trip } from '../../features/trips/tripsSlice';
+import { deleteTripCascade } from '../../features/trips/tripDetailSlice';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+
+const { width } = Dimensions.get('window');
 
 const SkeletonCard = () => {
   const opacity = useRef(new Animated.Value(0.3)).current;
@@ -23,12 +28,17 @@ const SkeletonCard = () => {
     <View style={styles.card}>
       <Animated.View style={[styles.cardImage, { backgroundColor: '#E2E8F0', opacity }]} />
       <View style={styles.cardInfo}>
-        <Animated.View style={{ height: 20, backgroundColor: '#E2E8F0', borderRadius: 4, width: '70%', marginBottom: 8, opacity }} />
-        <Animated.View style={{ height: 16, backgroundColor: '#E2E8F0', borderRadius: 4, width: '50%', marginBottom: 8, opacity }} />
+        <Animated.View style={{ height: 24, backgroundColor: '#E2E8F0', borderRadius: 6, width: '70%', marginBottom: 12, opacity }} />
+        <Animated.View style={{ height: 16, backgroundColor: '#E2E8F0', borderRadius: 4, width: '50%', marginBottom: 12, opacity }} />
         <Animated.View style={{ height: 16, backgroundColor: '#E2E8F0', borderRadius: 4, width: '40%', opacity }} />
       </View>
     </View>
   );
+};
+
+const formatKm = (km: number) => {
+  if (!km) return '0 m';
+  return km >= 1 ? `${km.toFixed(1)} km` : `${(km * 1000).toFixed(0)} m`;
 };
 
 export default function TripsScreen({ navigation }: any) {
@@ -60,19 +70,20 @@ export default function TripsScreen({ navigation }: any) {
 
   const handleDeleteConfirm = async () => {
     if (selectedTripForDelete) {
-      await dispatch(deleteTrip(selectedTripForDelete.id));
+      await dispatch(deleteTripCascade(selectedTripForDelete.id));
+      dispatch(fetchTrips(user?.uid));
       setDeleteDialogVisible(false);
       setSelectedTripForDelete(null);
     }
   };
 
-  const getStatusLabel = (status: string | undefined) => {
+  const getStatusConfig = (status: string | undefined) => {
     switch (status) {
-      case 'Planning': return 'Lên kế hoạch';
-      case 'Upcoming': return 'Sắp tới';
-      case 'Ongoing': return 'Đang diễn ra';
-      case 'Completed': return 'Đã hoàn thành';
-      default: return 'Sắp tới';
+      case 'Planning': return { label: 'Lên kế hoạch', colors: ['#E0F2FE', '#BAE6FD'] as [string, string], textColor: '#0284C7' };
+      case 'Upcoming': return { label: 'Sắp tới', colors: ['#FEF3C7', '#FDE68A'] as [string, string], textColor: '#D97706' };
+      case 'Ongoing': return { label: 'Đang đi', colors: ['#D1FAE5', '#A7F3D0'] as [string, string], textColor: '#059669' };
+      case 'Completed': return { label: 'Hoàn thành', colors: ['#F1F5F9', '#E2E8F0'] as [string, string], textColor: '#475569' };
+      default: return { label: 'Sắp tới', colors: ['#FEF3C7', '#FDE68A'] as [string, string], textColor: '#D97706' };
     }
   };
 
@@ -86,66 +97,57 @@ export default function TripsScreen({ navigation }: any) {
   });
 
   const renderTripCard = ({ item }: { item: Trip }) => {
-    // Tính tổng số ngày
-    const startDate = new Date(item.startDate);
-    const endDate = new Date(item.endDate);
-    const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    const startDate = new Date(item.startDate); startDate.setHours(0,0,0,0);
+    const endDate = new Date(item.endDate); endDate.setHours(0,0,0,0);
+    const diffDays = Math.max(1, Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
+    const statusCfg = getStatusConfig(item.status);
 
     return (
       <TouchableOpacity 
-        activeOpacity={0.8}
+        activeOpacity={0.9}
         onPress={() => navigation.navigate('TripDetail', { trip: item })}
         style={styles.card}
       >
-        <Image source={{ uri: item.coverImage }} style={styles.cardImage} />
+        <Image source={{ uri: item.coverImage || 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1' }} style={styles.cardImage} />
         
+        {/* Floating Badge */}
+        <LinearGradient colors={statusCfg.colors} style={styles.floatingBadge} start={{x:0,y:0}} end={{x:1,y:1}}>
+          <Text style={[styles.badgeText, { color: statusCfg.textColor }]}>{statusCfg.label}</Text>
+        </LinearGradient>
+
         <View style={styles.cardInfo}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <View style={{ flex: 1, paddingRight: 8 }}>
+          <View style={styles.cardHeader}>
+            <View style={{ flex: 1, paddingRight: 12 }}>
               <Text style={styles.cardTitle} numberOfLines={1}>{item.title}</Text>
-              <Text style={styles.cardDate}>
-                {item.startDate} - {item.endDate}
-              </Text>
+              <Text style={styles.cardDate}>{new Date(item.startDate).toLocaleDateString('vi-VN')} - {new Date(item.endDate).toLocaleDateString('vi-VN')}</Text>
             </View>
             
             <Menu
               visible={menuVisibleId === item.id}
               onDismiss={() => setMenuVisibleId(null)}
               anchor={
-                <TouchableOpacity onPress={() => setMenuVisibleId(item.id)} style={{ padding: 4 }}>
-                  <MoreVertical color="#64748B" size={20} />
+                <TouchableOpacity onPress={() => setMenuVisibleId(item.id)} style={styles.moreBtn}>
+                  <MoreVertical color="#94A3B8" size={20} />
                 </TouchableOpacity>
               }
+              contentStyle={{ borderRadius: 12, backgroundColor: '#fff' }}
             >
-              <Menu.Item onPress={() => { setMenuVisibleId(null); navigation.navigate('TripDetail', { trip: item }); }} title="Xem chi tiết" />
-              <Menu.Item onPress={() => { setMenuVisibleId(null); navigation.navigate('EditTrip', { trip: item }); }} title="Sửa" />
-              <Menu.Item onPress={() => { setMenuVisibleId(null); /* Handle Favorite */ }} title="Thêm vào yêu thích" />
-              <Menu.Item 
-                titleStyle={{ color: '#EF4444' }} 
-                onPress={() => {
-                  setMenuVisibleId(null);
-                  setSelectedTripForDelete(item);
-                  setDeleteDialogVisible(true);
-                }} 
-                title="Xóa" 
-              />
+              <Menu.Item onPress={() => { setMenuVisibleId(null); navigation.navigate('TripDetail', { trip: item }); }} title="Xem chi tiết" leadingIcon="eye-outline" />
+              <Menu.Item onPress={() => { setMenuVisibleId(null); navigation.navigate('AddTrip', { trip: item }); }} title="Sửa" leadingIcon="pencil-outline" />
+              <Menu.Item titleStyle={{ color: '#EF4444' }} onPress={() => { setMenuVisibleId(null); setSelectedTripForDelete(item); setDeleteDialogVisible(true); }} title="Xóa" leadingIcon="trash-can-outline" />
             </Menu>
           </View>
 
-          <View style={styles.cardFooter}>
-            <View style={styles.metaRow}>
+          <View style={styles.metaRow}>
+            <View style={styles.metaBadge}>
               <Text style={styles.metaText}>{diffDays} ngày</Text>
-              <Text style={styles.metaDot}>•</Text>
-              <Text style={styles.metaText}>{item.totalDistance || 0} km</Text>
-              <Text style={styles.metaDot}>•</Text>
-              <MapPin color="#64748B" size={12} style={{ marginRight: 4 }} />
-              <Text style={styles.metaText}>{item.itinerary?.length || 0} địa điểm</Text>
             </View>
-            <View style={[styles.statusBadge, item.status === 'Completed' && styles.statusBadgeCompleted, item.status === 'Ongoing' && styles.statusBadgeOngoing]}>
-              <Text style={[styles.statusText, item.status === 'Completed' && styles.statusTextCompleted, item.status === 'Ongoing' && styles.statusTextOngoing]}>
-                {getStatusLabel(item.status)}
-              </Text>
+            <View style={styles.metaBadge}>
+              <Text style={styles.metaText}>{formatKm(item.totalDistance || 0)}</Text>
+            </View>
+            <View style={[styles.metaBadge, { backgroundColor: '#EFF6FF' }]}>
+              <MapPin color="#3B82F6" size={12} style={{ marginRight: 4 }} />
+              <Text style={[styles.metaText, { color: '#3B82F6' }]}>{item.totalLocations || 0} địa điểm</Text>
             </View>
           </View>
         </View>
@@ -153,104 +155,88 @@ export default function TripsScreen({ navigation }: any) {
     );
   };
 
-  const renderFilterScroll = () => (
-    <View style={styles.filterContainer}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
-        <TouchableOpacity style={[styles.filterChip, filter === 'all' && styles.filterChipActive]} onPress={() => setFilter('all')}>
-          <Text style={[styles.filterText, filter === 'all' && styles.filterTextActive]}>Tất cả</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.filterChip, filter === 'upcoming' && styles.filterChipActive]} onPress={() => setFilter('upcoming')}>
-          <Text style={[styles.filterText, filter === 'upcoming' && styles.filterTextActive]}>Sắp tới</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.filterChip, filter === 'ongoing' && styles.filterChipActive]} onPress={() => setFilter('ongoing')}>
-          <Text style={[styles.filterText, filter === 'ongoing' && styles.filterTextActive]}>Đang diễn ra</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.filterChip, filter === 'completed' && styles.filterChipActive]} onPress={() => setFilter('completed')}>
-          <Text style={[styles.filterText, filter === 'completed' && styles.filterTextActive]}>Đã hoàn thành</Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </View>
-  );
-
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()}>
-          <ArrowLeft color="#0F172A" size={24} />
-        </TouchableOpacity>
+    <View style={styles.container}>
+      <View style={styles.headerBg}>
+        <LinearGradient colors={['#F0F9FF', '#F8FAFC']} style={StyleSheet.absoluteFillObject} />
+      </View>
+
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <Text style={styles.headerTitle}>Chuyến đi của tôi</Text>
-        <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.navigate('AddTrip')}>
-          <Plus color="#3B82F6" size={24} />
+        <TouchableOpacity style={styles.addBtn} onPress={() => navigation.navigate('AddTrip')}>
+          <LinearGradient colors={['#3B82F6', '#8B5CF6']} style={styles.addBtnGradient} start={{x:0,y:0}} end={{x:1,y:1}}>
+            <Plus color="#fff" size={24} />
+          </LinearGradient>
         </TouchableOpacity>
       </View>
 
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <Search color="#94A3B8" size={20} style={styles.searchIcon} />
-        <TextInput
-          placeholder="Tìm kiếm chuyến đi..."
-          placeholderTextColor="#94A3B8"
-          style={styles.searchInput}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
+      <View style={styles.searchWrap}>
+        <View style={styles.searchContainer}>
+          <Search color="#94A3B8" size={20} style={styles.searchIcon} />
+          <TextInput
+            placeholder="Tìm kiếm hành trình..."
+            placeholderTextColor="#94A3B8"
+            style={styles.searchInput}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+        </View>
       </View>
 
-      {/* Filters */}
-      {renderFilterScroll()}
+      <View style={styles.filterWrap}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
+          {['all', 'upcoming', 'ongoing', 'completed'].map((f) => {
+            const labels: any = { all: 'Tất cả', upcoming: 'Sắp tới', ongoing: 'Đang diễn ra', completed: 'Hoàn thành' };
+            const isActive = filter === f;
+            return (
+              <TouchableOpacity key={f} onPress={() => setFilter(f)} activeOpacity={0.8}>
+                <LinearGradient 
+                  colors={isActive ? ['#3B82F6', '#2563EB'] : ['#fff', '#fff']} 
+                  style={[styles.filterChip, !isActive && styles.filterChipInactive]}
+                >
+                  <Text style={[styles.filterText, isActive && styles.filterTextActive]}>{labels[f]}</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
 
-      {/* Main List */}
-      {isLoading && !refreshing ? (
-        <View style={styles.listContainer}>
-          <SkeletonCard />
-          <SkeletonCard />
-          <SkeletonCard />
-        </View>
-      ) : error ? (
-        <View style={styles.centerContainer}>
-          <Text style={styles.errorText}>Đã có lỗi xảy ra: {error}</Text>
-          <Button mode="contained" onPress={onRefresh} style={{ marginTop: 16 }}>Thử lại</Button>
-        </View>
-      ) : (
-        <FlatList
-          data={filteredTrips}
-          keyExtractor={(item) => item.id}
-          renderItem={renderTripCard}
-          contentContainerStyle={styles.listContainer}
-          showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#3B82F6']} />}
-          ListEmptyComponent={
-            <View style={styles.centerContainer}>
-              <Image source={{ uri: 'https://cdn-icons-png.flaticon.com/512/7486/7486744.png' }} style={styles.emptyIcon} />
-              <Text style={styles.emptyTitle}>Chưa có chuyến đi nào</Text>
-              <Text style={styles.emptySubtitle}>Hãy bắt đầu hành trình của bạn ngay hôm nay!</Text>
-              <Button mode="contained" onPress={() => navigation.navigate('AddTrip')} style={{ marginTop: 16, backgroundColor: '#3B82F6' }}>
-                Tạo chuyến đi mới
-              </Button>
-            </View>
-          }
-        />
-      )}
-
-      {/* FAB */}
-      <FAB
-        icon="plus"
-        style={styles.fab}
-        color="#fff"
-        onPress={() => navigation.navigate('AddTrip')}
+      <FlatList
+        data={filteredTrips}
+        keyExtractor={(item) => item.id}
+        renderItem={renderTripCard}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#3B82F6" />}
+        ListEmptyComponent={() => (
+          <View style={styles.emptyContainer}>
+            {isLoading ? (
+              <>
+                <SkeletonCard />
+                <SkeletonCard />
+              </>
+            ) : (
+              <View style={styles.emptyState}>
+                <View style={styles.emptyIconWrap}><Sparkles color="#8B5CF6" size={48} /></View>
+                <Text style={styles.emptyTitle}>Chưa có chuyến đi nào</Text>
+                <Text style={styles.emptySubtitle}>Bắt đầu lên kế hoạch cho chuyến phiêu lưu tiếp theo của bạn ngay hôm nay!</Text>
+                <Button mode="contained" onPress={() => navigation.navigate('AddTrip')} style={styles.emptyBtn} contentStyle={{ height: 48 }}>
+                  Tạo chuyến đi mới
+                </Button>
+              </View>
+            )}
+          </View>
+        )}
       />
 
-      {/* Delete Dialog */}
       <Portal>
-        <Dialog visible={deleteDialogVisible} onDismiss={() => setDeleteDialogVisible(false)} style={{ backgroundColor: '#fff', borderRadius: 16 }}>
-          <Dialog.Title style={{ fontWeight: 'bold' }}>Xóa chuyến đi</Dialog.Title>
-          <Dialog.Content>
-            <Text style={{ color: '#475569' }}>Bạn có chắc chắn muốn xóa chuyến đi "{selectedTripForDelete?.title}"? Hành động này không thể hoàn tác.</Text>
-          </Dialog.Content>
+        <Dialog visible={deleteDialogVisible} onDismiss={() => setDeleteDialogVisible(false)} style={{ borderRadius: 16, backgroundColor: '#fff' }}>
+          <Dialog.Title>Xóa chuyến đi?</Dialog.Title>
+          <Dialog.Content><Text style={{ color: '#475569' }}>Toàn bộ dữ liệu về địa điểm, chi tiêu, và hình ảnh của chuyến đi này sẽ bị xóa vĩnh viễn.</Text></Dialog.Content>
           <Dialog.Actions>
             <Button onPress={() => setDeleteDialogVisible(false)} textColor="#64748B">Hủy</Button>
-            <Button onPress={handleDeleteConfirm} textColor="#EF4444" mode="contained" style={{ backgroundColor: '#FEE2E2', elevation: 0 }}>Xóa</Button>
+            <Button onPress={handleDeleteConfirm} textColor="#EF4444">Xóa vĩnh viễn</Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>
@@ -260,56 +246,38 @@ export default function TripsScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#F8FAFC'
-  },
-  headerBtn: { padding: 8 },
-  headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#0F172A' },
-  searchContainer: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff',
-    marginHorizontal: 24, borderRadius: 12, paddingHorizontal: 16, height: 48,
-    marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
-  },
+  headerBg: { position: 'absolute', top: 0, left: 0, right: 0, height: 200 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingBottom: 16 },
+  headerTitle: { fontSize: 28, fontWeight: '900', color: '#0F172A', letterSpacing: -0.5 },
+  addBtn: { borderRadius: 16, shadowColor: '#3B82F6', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 8 },
+  addBtnGradient: { width: 48, height: 48, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  searchWrap: { paddingHorizontal: 20, marginBottom: 16 },
+  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 16, paddingHorizontal: 16, height: 54, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
   searchIcon: { marginRight: 12 },
-  searchInput: { flex: 1, fontSize: 15, color: '#0F172A' },
-  filterContainer: { marginBottom: 16 },
-  filterScroll: { paddingHorizontal: 24, gap: 12 },
-  filterChip: {
-    paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20,
-    backgroundColor: '#F1F5F9',
-  },
-  filterChipActive: { backgroundColor: '#3B82F6' },
-  filterText: { fontSize: 14, color: '#64748B', fontWeight: '500' },
+  searchInput: { flex: 1, height: '100%', fontSize: 16, color: '#0F172A' },
+  filterWrap: { marginBottom: 16 },
+  filterScroll: { paddingHorizontal: 20, gap: 10 },
+  filterChip: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 100 },
+  filterChipInactive: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#E2E8F0' },
+  filterText: { color: '#64748B', fontWeight: '600', fontSize: 14 },
   filterTextActive: { color: '#fff' },
-  listContainer: { paddingHorizontal: 24, paddingBottom: 100 },
-  card: {
-    flexDirection: 'row', backgroundColor: '#fff', borderRadius: 16,
-    marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05, shadowRadius: 8, elevation: 2, overflow: 'hidden', minHeight: 110
-  },
-  cardImage: { width: 110, height: '100%', minHeight: 110 },
-  cardInfo: { flex: 1, padding: 12, justifyContent: 'space-between' },
-  cardTitle: { fontSize: 16, fontWeight: 'bold', color: '#0F172A', marginBottom: 4 },
-  cardDate: { fontSize: 13, color: '#64748B', marginBottom: 8 },
-  cardFooter: { flexDirection: 'column', gap: 6 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },
-  metaText: { fontSize: 12, color: '#64748B', fontWeight: '500' },
-  metaDot: { fontSize: 12, color: '#CBD5E1', marginHorizontal: 6 },
-  statusBadge: {
-    alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 4,
-    borderRadius: 8, backgroundColor: '#EFF6FF'
-  },
-  statusBadgeOngoing: { backgroundColor: '#FEF3C7' },
-  statusBadgeCompleted: { backgroundColor: '#ECFDF5' },
-  statusText: { fontSize: 11, fontWeight: 'bold', color: '#3B82F6' },
-  statusTextOngoing: { color: '#D97706' },
-  statusTextCompleted: { color: '#10B981' },
-  fab: { position: 'absolute', margin: 16, right: 8, bottom: 16, backgroundColor: '#3B82F6', borderRadius: 28 },
-  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40, marginTop: 40 },
-  errorText: { color: '#EF4444', textAlign: 'center' },
-  emptyIcon: { width: 120, height: 120, marginBottom: 16, opacity: 0.5 },
-  emptyTitle: { fontSize: 18, fontWeight: 'bold', color: '#0F172A', marginBottom: 8 },
-  emptySubtitle: { fontSize: 14, color: '#64748B', textAlign: 'center' },
+  listContent: { paddingHorizontal: 20, paddingBottom: 100 },
+  card: { backgroundColor: '#fff', borderRadius: 24, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.05, shadowRadius: 15, elevation: 5, overflow: 'hidden' },
+  cardImage: { width: '100%', height: 180, resizeMode: 'cover' },
+  floatingBadge: { position: 'absolute', top: 16, right: 16, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 100 },
+  badgeText: { fontWeight: 'bold', fontSize: 12 },
+  cardInfo: { padding: 20 },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
+  cardTitle: { fontSize: 20, fontWeight: 'bold', color: '#0F172A', marginBottom: 4 },
+  cardDate: { fontSize: 14, color: '#64748B' },
+  moreBtn: { padding: 4, backgroundColor: '#F1F5F9', borderRadius: 100 },
+  metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  metaBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#E2E8F0' },
+  metaText: { fontSize: 12, color: '#475569', fontWeight: '600' },
+  emptyContainer: { flex: 1, justifyContent: 'center', paddingVertical: 40 },
+  emptyState: { alignItems: 'center', paddingHorizontal: 32 },
+  emptyIconWrap: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#F3E8FF', justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
+  emptyTitle: { fontSize: 20, fontWeight: 'bold', color: '#0F172A', marginBottom: 8 },
+  emptySubtitle: { fontSize: 15, color: '#64748B', textAlign: 'center', lineHeight: 22, marginBottom: 32 },
+  emptyBtn: { backgroundColor: '#3B82F6', borderRadius: 12, width: '100%' },
 });
