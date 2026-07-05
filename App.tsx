@@ -9,6 +9,11 @@ import { PaperProvider, MD3LightTheme } from 'react-native-paper';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import { LogBox } from 'react-native';
+
+LogBox.ignoreLogs([
+  'When setting overflow to hidden on Surface the shadow will not be displayed correctly'
+]);
 
 const customTheme = {
   ...MD3LightTheme,
