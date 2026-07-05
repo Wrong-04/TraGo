@@ -1,11 +1,55 @@
-# Sample Snack app
+# Smart Travel (TraGo) - Ứng dụng Quản lý Hành trình Thông minh
 
-Open the `App.js` file to start writing some code. You can preview the changes directly on your phone or tablet by scanning the **QR code** or use the iOS or Android emulators. When you're done, click **Save** and share the link!
+Chào mừng bạn đến với **Smart Travel**, ứng dụng hỗ trợ lập kế hoạch chuyến đi, quản lý ngân sách, lưu trữ nhật ký hình ảnh, và tích hợp AI gợi ý lịch trình cùng bản đồ tương tác siêu mượt! 🚀
 
-When you're ready to see everything that Expo provides (or if you want to use your own editor) you can **Download** your project and use it with [expo cli](https://docs.expo.dev/get-started/installation/#expo-cli)).
+## 📋 Yêu cầu hệ thống
 
-All projects created in Snack are publicly available, so you can easily share the link to this project via link, or embed it on a web page with the `<>` button.
+Trước khi bắt đầu, hãy đảm bảo máy tính của bạn đã cài đặt các công cụ sau:
+- **Node.js** (Phiên bản v18.0.0 trở lên)
+- **npm** (đã đi kèm khi cài Node.js) hoặc **yarn**
+- **Git**
+- Máy ảo Android Studio (cho Android) / Xcode (cho iOS) hoặc ứng dụng **Expo Go** trên điện thoại thật.
 
-If you're having problems, you can tweet to us [@expo](https://twitter.com/expo) or ask in our [forums](https://forums.expo.dev/c/expo-dev-tools/61) or [Discord](https://chat.expo.dev/).
+---
 
-Snack is Open Source. You can find the code on the [GitHub repo](https://github.com/expo/snack).
+## 🛠 Hướng dẫn Cài đặt & Chạy ứng dụng
+
+### Bước 1: Tải mã nguồn và cài đặt thư viện
+Mở Terminal, di chuyển vào thư mục dự án và chạy lệnh:
+```bash
+# Tải tất cả các gói thư viện (packages) cần thiết
+npm install
+```
+
+### Bước 2: Cấu hình biến môi trường (.env)
+Dự án yêu cầu các khóa API (Supabase, Google Maps, Gemini...) để hoạt động. 
+1. Mở file `.env.example`.
+2. Điền các khóa API hợp lệ vào.
+3. Đổi tên file từ `.env.example` thành `.env` (hoặc tạo một bản sao tên `.env`).
+
+### Bước 3: Khởi động Ứng dụng
+Chạy lệnh sau để bật Metro Bundler của Expo:
+```bash
+npx expo start
+```
+*(Nếu bạn muốn xóa bộ đệm cũ để tránh lỗi khi cài thư viện mới, hãy chạy: `npx expo start -c`)*
+
+### Bước 4: Xem ứng dụng trên máy ảo / Thiết bị thật
+Khi lệnh khởi động thành công, Terminal sẽ hiện ra một **Mã QR code** và danh sách phím tắt:
+- **Trên Điện thoại thật:** Tải app `Expo Go` (trên iOS/Android), mở app và quét mã QR. Đảm bảo điện thoại và máy tính kết nối chung mạng Wi-Fi.
+- **Trên Máy ảo Android:** Bấm phím **`a`** trên bàn phím Terminal (yêu cầu Android Studio Emulator đã mở).
+- **Trên Máy ảo iOS:** Bấm phím **`i`** trên bàn phím Terminal (yêu cầu máy Mac có Xcode Simulator).
+- **Phím tiện ích:** Bấm phím **`r`** để tải lại (Reload) ứng dụng ngay lập tức khi bạn sửa code.
+
+---
+
+## 🧩 Công nghệ sử dụng
+- **React Native / Expo** (Framework UI cốt lõi)
+- **TypeScript** (Kiểm soát kiểu dữ liệu chặt chẽ)
+- **Redux Toolkit** (Quản lý trạng thái State)
+- **Supabase** (Backend as a Service: Auth, Database Postgres, Storage)
+- **React Navigation v7** (Điều hướng mượt mà)
+- **Google Maps API / Expo Location** (Bản đồ & Định vị)
+- **React Native Paper & Lucide Icons** (Thư viện UI/Icon hiện đại)
+
+Chúc bạn có một trải nghiệm code tuyệt vời cùng **Smart Travel**! 🎉
