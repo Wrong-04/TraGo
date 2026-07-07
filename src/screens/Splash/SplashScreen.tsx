@@ -2,10 +2,15 @@ import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ImageBackground, Dimensions, Animated } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MapPin } from 'lucide-react-native';
+import { useSelector } from 'react-redux';
+import { RootState } from '../../features/store';
+import { translations } from '../../constants/translations';
 
 const { width, height } = Dimensions.get('window');
 
 export default function SplashScreen({ onFinish }: { onFinish?: () => void }) {
+  const settings = useSelector((state: RootState) => state.settings);
+  const texts = translations[settings.language].common;
   const [progress] = useState(new Animated.Value(0));
   const [percent, setPercent] = useState(0);
 
@@ -45,8 +50,7 @@ export default function SplashScreen({ onFinish }: { onFinish?: () => void }) {
           </View>
           
           <Text style={styles.title}>Smart Travel</Text>
-          <Text style={styles.subtitle}>Nhật ký hành trình</Text>
-          <Text style={styles.subtitle}>& Du lịch thông minh</Text>
+          <Text style={styles.subtitle}>{texts.loading}</Text>
         </View>
 
         <View style={styles.bottomContainer}>
