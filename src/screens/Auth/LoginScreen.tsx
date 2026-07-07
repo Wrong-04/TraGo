@@ -5,12 +5,17 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../config/supabase';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
+import { useSelector } from 'react-redux';
+import { RootState } from '../../features/store';
+import { translations } from '../../constants/translations';
 
 WebBrowser.maybeCompleteAuthSession();
 
 export default function LoginScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const settings = useSelector((state: RootState) => state.settings);
+  const texts = translations[settings.language].auth;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -40,7 +45,7 @@ export default function LoginScreen() {
     if (response?.type === 'success') {
       const idToken = response.authentication?.idToken || response.params?.id_token;
       if (!idToken) {
-        setErrorMsg('Lỗi: Không nhận được token từ Google.');
+        setErrorMsg(texts.googleTokenMissing);
         return;
       }
       setLoading(true);
@@ -54,31 +59,31 @@ export default function LoginScreen() {
         }
         setLoading(false);
       }).catch(err => {
-        setErrorMsg('Đăng nhập Google thất bại: ' + err.message);
+        setErrorMsg(texts.googleFailed + ': ' + err.message);
         setLoading(false);
       });
     } else if (response?.type === 'error') {
-      setErrorMsg('Đã hủy hoặc xảy ra lỗi khi đăng nhập Google.');
+      setErrorMsg(texts.googleCancelled);
     }
   }, [response]);
 
   const handleAuth = async () => {
     if (!email || !password) {
-      setErrorMsg('Vui lòng nhập email và mật khẩu');
+      setErrorMsg(texts.emailPasswordRequired);
       return;
     }
 
     if (isRegister) {
       if (!fullName.trim()) {
-        setErrorMsg('Vui lòng nhập Họ và tên.');
+        setErrorMsg(texts.fullNameRequired);
         return;
       }
       if (password !== confirmPassword) {
-        setErrorMsg('Mật khẩu xác nhận không khớp.');
+        setErrorMsg(texts.passwordMismatch);
         return;
       }
       if (password.length < 8) {
-        setErrorMsg('Mật khẩu quá yếu! Yêu cầu ít nhất 8 ký tự.');
+        setErrorMsg(texts.passwordTooShort);
         return;
       }
     }
@@ -107,7 +112,7 @@ export default function LoginScreen() {
       if (displayError.includes('{"type":"default"')) {
         displayError = 'Lỗi máy chủ (Internal Server Error). Vui lòng thử lại sau.';
       }
-      setErrorMsg((isRegister ? 'Đăng ký' : 'Đăng nhập') + ' thất bại: ' + displayError);
+      setErrorMsg((isRegister ? texts.registerFailed : texts.loginFailed) + ': ' + displayError);
     } finally {
       setLoading(false);
     }
@@ -123,17 +128,17 @@ export default function LoginScreen() {
         <ScrollView showsVerticalScrollIndicator={false}>
           <View style={styles.formContainer}>
             <Text variant="headlineLarge" style={styles.title}>
-              Chào mừng trở lại! 👋
+              {texts.welcomeTitle}
             </Text>
             <Text variant="bodyLarge" style={styles.subtitle}>
-              Đăng nhập để tiếp tục hành trình
+              {texts.welcomeSubtitle}
             </Text>
 
             {errorMsg ? <Text style={styles.errorText}>{errorMsg}</Text> : null}
 
             {isRegister && (
               <TextInput
-                label="Họ và tên"
+                label={texts.fullName}
                 value={fullName}
                 onChangeText={setFullName}
                 mode="outlined"
@@ -144,7 +149,7 @@ export default function LoginScreen() {
             )}
 
             <TextInput
-              label="Email"
+              label={texts.email}
               value={email}
               onChangeText={setEmail}
               mode="outlined"
@@ -156,7 +161,7 @@ export default function LoginScreen() {
             />
 
             <TextInput
-              label="Mật khẩu"
+              label={texts.password}
               value={password}
               onChangeText={setPassword}
               mode="outlined"
@@ -169,7 +174,7 @@ export default function LoginScreen() {
 
             {isRegister && (
               <TextInput
-                label="Xác nhận mật khẩu"
+                label={texts.confirmPassword}
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
                 mode="outlined"
@@ -186,10 +191,10 @@ export default function LoginScreen() {
                   <View style={[styles.checkboxPlaceholder, rememberMe && styles.checkboxActive]}>
                     {rememberMe && <Text style={{color: '#fff', fontSize: 12, textAlign: 'center', lineHeight: 16}}>✓</Text>}
                   </View>
-                  <Text style={{ marginLeft: 8, color: theme.colors.secondary }}>Ghi nhớ đăng nhập</Text>
+                  <Text style={{ marginLeft: 8, color: theme.colors.secondary }}>{texts.rememberMe}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity>
-                  <Text style={{ color: theme.colors.primary, fontWeight: '500' }}>Quên mật khẩu?</Text>
+                  <Text style={{ color: theme.colors.primary, fontWeight: '500' }}>{texts.forgotPassword}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -202,7 +207,7 @@ export default function LoginScreen() {
               style={styles.authButton}
               labelStyle={styles.authButtonLabel}
             >
-              {isRegister ? 'Đăng ký' : 'Đăng nhập'}
+              {isRegister ? texts.register : texts.login}
             </Button>
 
             {!isRegister && (
@@ -215,11 +220,11 @@ export default function LoginScreen() {
 
             <View style={styles.footerRow}>
               <Text style={{ color: theme.colors.secondary }}>
-                {isRegister ? 'Đã có tài khoản?' : 'Chưa có tài khoản?'}
+                {isRegister ? texts.alreadyHaveAccount : texts.noAccount}
               </Text>
               <TouchableOpacity onPress={() => setIsRegister(!isRegister)}>
                 <Text style={styles.footerLink}>
-                  {isRegister ? ' Đăng nhập ngay' : ' Đăng ký ngay'}
+                  {isRegister ? ` ${texts.loginNow}` : ` ${texts.registerNow}`}
                 </Text>
               </TouchableOpacity>
             </View>

@@ -4,6 +4,7 @@ import tripsReducer from './trips/tripsSlice';
 import tripDetailReducer from './trips/tripDetailSlice';
 import mapReducer from './map/mapSlice';
 import galleryReducer from './gallery/gallerySlice';
+import settingsReducer from './settings/settingsSlice';
 
 export const store = configureStore({
   reducer: {
@@ -12,6 +13,7 @@ export const store = configureStore({
     tripDetail: tripDetailReducer,
     map: mapReducer,
     gallery: galleryReducer,
+    settings: settingsReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

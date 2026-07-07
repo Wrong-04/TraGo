@@ -1,36 +1,22 @@
 import React, { useEffect, useState } from 'react';
-import { Provider, useDispatch } from 'react-redux';
-import { store, AppDispatch } from './src/features/store';
+import { Provider, useDispatch, useSelector } from 'react-redux';
+import { store, AppDispatch, RootState } from './src/features/store';
 import { supabase } from './src/config/supabase';
 import { setUser } from './src/features/auth/authSlice';
 import RootNavigator from './src/navigation/RootNavigator';
 import SplashScreen from './src/screens/Splash/SplashScreen';
-import { PaperProvider, MD3LightTheme } from 'react-native-paper';
+import { PaperProvider } from 'react-native-paper';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { LogBox } from 'react-native';
-
-LogBox.ignoreLogs([
-  'When setting overflow to hidden on Surface the shadow will not be displayed correctly'
-]);
-
-const customTheme = {
-  ...MD3LightTheme,
-  colors: {
-    ...MD3LightTheme.colors,
-    primary: '#3B82F6',
-    secondary: '#64748b',
-    background: '#f8fafc',
-    surface: '#ffffff',
-    error: '#ef4444',
-  },
-};
+import { lightTheme, darkTheme } from './src/constants/theme';
 
 function AppContent() {
   const [sessionChecked, setSessionChecked] = useState(false);
   const [splashFinished, setSplashFinished] = useState(false);
   const dispatch = useDispatch<AppDispatch>();
+  const darkMode = useSelector((state: RootState) => state.settings.darkMode);
+
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -71,14 +57,23 @@ function AppContent() {
 export default function App() {
   return (
     <Provider store={store}>
-      <PaperProvider theme={customTheme}>
-        <SafeAreaProvider>
-          <NavigationContainer>
-            <AppContent />
-            <StatusBar style="auto" />
-          </NavigationContainer>
-        </SafeAreaProvider>
-      </PaperProvider>
+      <AppContentWrapper />
     </Provider>
+  );
+}
+
+function AppContentWrapper() {
+  const darkMode = useSelector((state: RootState) => state.settings.darkMode);
+  const theme = darkMode ? darkTheme : lightTheme;
+
+  return (
+    <PaperProvider theme={theme}>
+      <SafeAreaProvider>
+        <NavigationContainer>
+          <AppContent />
+          <StatusBar style={darkMode ? 'light' : 'dark'} />
+        </NavigationContainer>
+      </SafeAreaProvider>
+    </PaperProvider>
   );
 }
