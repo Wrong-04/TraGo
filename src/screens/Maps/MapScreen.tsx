@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, StyleSheet, Dimensions, Image, ScrollView,
   TouchableOpacity, Alert, Platform, Animated,
-  TextInput as RNTextInput, KeyboardAvoidingView, InteractionManager,
+  TextInput as RNTextInput, KeyboardAvoidingView, InteractionManager, Modal,
 } from 'react-native';
 import {
   Text, Button, Portal, Dialog, TextInput,
@@ -13,7 +13,7 @@ import MapView, { Marker, Polyline, Region } from 'react-native-maps';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../features/store';
 import {
-  Star, ArrowLeft, MapPin, Crosshair, Plus, Minus, Search,
+  Star, ArrowLeft, MapPin, Crosshair, X, Plus, Minus, Search,
   Maximize2, Navigation as NavIcon, Camera, BookOpen,
   Pencil, Trash2, Image as ImageIcon, Layers, Copy,
   Heart, Cloud, CloudRain, Sun, Smile, Frown, Meh, Clock
@@ -21,6 +21,7 @@ import {
 import { supabase } from '../../config/supabase';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
+import * as Linking from 'expo-linking';
 import * as Linking2 from 'expo-linking';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -85,9 +86,15 @@ export default function MapScreen({ route, navigation }: any) {
   const [selectedLocation, setSelectedLocation] = useState<TripLocation | null>(null);
   const [loading, setLoading] = useState(false);
   const [mapReady, setMapReady] = useState(false);
+  const [mapType, setMapType] = useState<'standard' | 'satellite' | 'terrain'>('standard');
   const [snackMsg, setSnackMsg] = useState('');
   const [snackVisible, setSnackVisible] = useState(false);
   const [snackError, setSnackError] = useState(false);
+
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [showResults, setShowResults] = useState(false);
+  const [previewLocation, setPreviewLocation] = useState<any | null>(null);
+  const debounceTimer = useRef<NodeJS.Timeout | null>(null);
 
   // Search & AI states
   const [searchQuery, setSearchQuery] = useState('');
@@ -206,6 +213,42 @@ export default function MapScreen({ route, navigation }: any) {
   };
 
   // ─── Search & AI Logic ─────────────────────────────────────────────────────
+  const searchNominatim = async (query: string) => {
+    if (!query.trim()) {
+      setSearchResults([]);
+      setShowResults(false);
+      return;
+    }
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&limit=5`, {
+        headers: { 
+          'Accept-Language': 'vi',
+          'User-Agent': 'TraGoApp/1.0 (Contact: admin@trago.com)'
+        }
+      });
+      const data = await res.json();
+      setSearchResults(data || []);
+      setShowResults(true);
+    } catch (e) {
+      console.log('Search API error:', e);
+    }
+  };
+
+  const onChangeSearchText = (text: string) => {
+    setSearchQuery(text);
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => searchNominatim(text), 500);
+  };
+
+  const onSelectSuggestion = (item: any) => {
+    const coords = { latitude: parseFloat(item.lat), longitude: parseFloat(item.lon) };
+    const name = item.name || item.display_name.split(',')[0];
+    setPreviewLocation({ name, ...coords, address: item.display_name });
+    setShowResults(false);
+    setSearchQuery(name);
+    mapRef.current?.animateToRegion({ ...coords, latitudeDelta: 0.05, longitudeDelta: 0.05 }, 1000);
+  };
+
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
     setSearching(true);
@@ -214,9 +257,8 @@ export default function MapScreen({ route, navigation }: any) {
       if (geocode && geocode.length > 0) {
         const coords = { latitude: geocode[0].latitude, longitude: geocode[0].longitude };
         mapRef.current?.animateToRegion({ ...coords, latitudeDelta: 0.05, longitudeDelta: 0.05 }, 1000);
-        
-        // Use AI to get info
-        fetchAIDetails(searchQuery, coords);
+        setPreviewLocation({ name: searchQuery, ...coords, address: '' });
+        setSearching(false);
       } else {
         showSnack('Không tìm thấy địa điểm này', true);
         setSearching(false);
@@ -225,6 +267,13 @@ export default function MapScreen({ route, navigation }: any) {
       showSnack('Lỗi tìm kiếm địa điểm', true);
       setSearching(false);
     }
+  };
+
+  const confirmPreviewLocation = () => {
+    if (!previewLocation) return;
+    setSearching(true);
+    fetchAIDetails(previewLocation.name, { latitude: previewLocation.latitude, longitude: previewLocation.longitude });
+    setPreviewLocation(null);
   };
 
   const fetchAIDetails = async (query: string, coords: any) => {
@@ -311,6 +360,80 @@ export default function MapScreen({ route, navigation }: any) {
     setFormImage(null);
   };
 
+
+  const toggleMapType = () => {
+    setMapType(prev => {
+      if (prev === 'standard') return 'satellite';
+      if (prev === 'satellite') return 'terrain';
+      return 'standard';
+    });
+  };
+
+  const handleZoomIn = () => {
+    mapRef.current?.getCamera().then((cam) => {
+      cam.altitude = (cam.altitude || 1000) / 2;
+      cam.zoom = (cam.zoom || 15) + 1;
+      mapRef.current?.animateCamera(cam, { duration: 500 });
+    });
+  };
+
+  const handleZoomOut = () => {
+    mapRef.current?.getCamera().then((cam) => {
+      cam.altitude = (cam.altitude || 1000) * 2;
+      cam.zoom = (cam.zoom || 15) - 1;
+      mapRef.current?.animateCamera(cam, { duration: 500 });
+    });
+  };
+
+  const handleRecenter = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        showSnack('Không có quyền truy cập vị trí.', true);
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({});
+      mapRef.current?.animateToRegion({
+        latitude: loc.coords.latitude,
+        longitude: loc.coords.longitude,
+        latitudeDelta: 0.05,
+        longitudeDelta: 0.05,
+      }, 1000);
+    } catch (e) {
+      showSnack('Không thể lấy vị trí hiện tại.', true);
+    }
+  };
+
+  const openGoogleMaps = (loc: TripLocation) => {
+    const url = `google.navigation:q=${loc.latitude},${loc.longitude}`;
+    Linking.openURL(url).catch(() => {
+      Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${loc.latitude},${loc.longitude}`);
+    });
+  };
+
+  const renderMarkerIcon = (category?: string) => {
+    if (!category) return <MapPin size={20} color="#fff" />;
+    if (category.includes('Beach')) return <Sun size={20} color="#fff" />;
+    if (category.includes('Hotel')) return <Star size={20} color="#fff" />;
+    if (category.includes('Food')) return <Star size={20} color="#fff" />;
+    if (category.includes('Museum')) return <BookOpen size={20} color="#fff" />;
+    return <MapPin size={20} color="#fff" />;
+  };
+
+  const openPrefilledAddForm = () => {
+    if (!selectedLocation) return;
+    setEditingLocation(null);
+    setFormName(selectedLocation.name || '');
+    setFormLat(selectedLocation.latitude.toString());
+    setFormLng(selectedLocation.longitude.toString());
+    setFormCategory(selectedLocation.category || CATEGORIES[0]);
+    setFormReview(selectedLocation.review || '');
+    setFormImage(selectedLocation.image || null);
+    setFormDate(selectedLocation.visit_date || new Date().toISOString().split('T')[0]);
+    fetchAddress(selectedLocation.latitude, selectedLocation.longitude);
+    setFormVisible(true);
+    closeBottomSheet();
+  };
   const openAddForm = (coord?: { latitude: number; longitude: number }) => {
     resetForm();
     if (coord) {
@@ -502,6 +625,14 @@ export default function MapScreen({ route, navigation }: any) {
 
   return (
     <View style={styles.container}>
+              {/* Preview Marker */}
+        {previewLocation && (
+          <Marker
+            coordinate={{ latitude: previewLocation.latitude, longitude: previewLocation.longitude }}
+            title={previewLocation.name}
+            pinColor="#3B82F6"
+          />
+        )}
       {/* ─── MapView ─── */}
       <MapView
         ref={mapRef}
@@ -554,13 +685,13 @@ export default function MapScreen({ route, navigation }: any) {
         </View>
 
         {/* Search Bar */}
-        <View style={styles.searchContainer}>
-          <RNTextInput
+                <View style={styles.searchContainer}>
+          <RNTextInput autoCorrect={false} spellCheck={false}
             style={styles.searchInput}
             placeholder="Tìm kiếm địa danh (VD: Tháp Eiffel)..."
             placeholderTextColor="#94A3B8"
             value={searchQuery}
-            onChangeText={setSearchQuery}
+            onChangeText={onChangeSearchText}
             onSubmitEditing={handleSearch}
             returnKeyType="search"
           />
@@ -572,7 +703,32 @@ export default function MapScreen({ route, navigation }: any) {
             </TouchableOpacity>
           )}
         </View>
+        
+        {/* Autocomplete Dropdown */}
+        {showResults && searchResults.length > 0 && (
+          <View style={styles.searchResultsWrap}>
+            {searchResults.map((item, idx) => (
+              <TouchableOpacity key={idx} style={styles.searchResultItem} onPress={() => onSelectSuggestion(item)}>
+                <MapPin color="#64748B" size={16} style={{marginRight: 10}} />
+                <View style={{flex: 1}}>
+                  <Text style={styles.searchResultName} numberOfLines={1}>{item.name || item.display_name.split(',')[0]}</Text>
+                  <Text style={styles.searchResultAddress} numberOfLines={1}>{item.display_name}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
       </View>
+
+            {/* ─── Confirm Preview Button ─── */}
+      {previewLocation && (
+        <View style={[styles.previewConfirmWrap, { bottom: insets.bottom + 20 }]}>
+          <TouchableOpacity style={styles.previewConfirmBtn} onPress={confirmPreviewLocation}>
+            <View style={styles.previewConfirmIcon}><Plus color="#fff" size={20} /></View>
+            <Text style={styles.previewConfirmTxt}>Thêm địa điểm này</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* ─── Add Button ─── */}
       {!addingMapMode && (
@@ -651,135 +807,110 @@ export default function MapScreen({ route, navigation }: any) {
         )}
       </Animated.View>
 
-      {/* ─── Form Dialog (Add/Edit) ─── */}
-      <Portal>
-        <Dialog visible={formVisible} onDismiss={confirmCancel} style={styles.formDialog} dismissable={false}>
-          <View style={styles.formDialogHeader}>
-            <Text style={styles.formDialogTitle}>{editingLocation ? 'Sửa địa điểm' : 'Thêm địa điểm mới'}</Text>
-            <TouchableOpacity onPress={confirmCancel}>
-              <Plus color="#64748B" size={24} style={{ transform: [{ rotate: '45deg' }] }} />
-            </TouchableOpacity>
-          </View>
+      {/* ─── Form Modal (Add/Edit) ─── */}
+      <Modal visible={formVisible} transparent animationType="slide" onRequestClose={() => setFormVisible(false)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setFormVisible(false)} />
           
-          <ScrollView style={styles.formScroll} showsVerticalScrollIndicator={false}>
-            {/* 📍 THÔNG TIN ĐỊA ĐIỂM */}
-            <Text style={styles.sectionTitle}>📍 Thông tin địa điểm</Text>
-            <TextInput label="Tên địa điểm *" value={formName} onChangeText={setFormName} mode="outlined" style={styles.input} />
-            <TextInput label="Địa chỉ" value={formAddress} onChangeText={setFormAddress} mode="outlined" style={styles.input} />
-            
-            <Text style={styles.subLabel}>Danh mục</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-              {CATEGORIES.map(cat => (
-                <Chip key={cat} selected={formCategory === cat} onPress={() => setFormCategory(cat)} style={styles.catChip} textStyle={{ color: formCategory === cat ? '#fff' : '#475569' }} selectedColor="#3B82F6">
-                  {cat}
-                </Chip>
-              ))}
-            </ScrollView>
-
-            <Divider style={styles.divider} />
-
-            {/* 🗺️ VỊ TRÍ */}
-            <Text style={styles.sectionTitle}>🗺️ Vị trí</Text>
-            <Button mode="outlined" icon="map-marker" onPress={() => { setFormVisible(false); setAddingMapMode(true); }} style={{ marginBottom: 12 }}>
-              Chọn lại trên bản đồ
-            </Button>
-            <View style={styles.row}>
-              <View style={[styles.inputGroup, { position: 'relative' }]}>
-                <TextInput label="Latitude *" value={formLat} editable={false} mode="outlined" style={[styles.input, { backgroundColor: '#F1F5F9' }]} />
-                <TouchableOpacity style={styles.copyBtn} onPress={() => copyToClipboard(formLat)}><Copy size={16} color="#64748B"/></TouchableOpacity>
-              </View>
-              <View style={[styles.inputGroup, { position: 'relative' }]}>
-                <TextInput label="Longitude *" value={formLng} editable={false} mode="outlined" style={[styles.input, { backgroundColor: '#F1F5F9' }]} />
-                <TouchableOpacity style={styles.copyBtn} onPress={() => copyToClipboard(formLng)}><Copy size={16} color="#64748B"/></TouchableOpacity>
-              </View>
-            </View>
-
-            <Divider style={styles.divider} />
-
-            {/* 📅 THÔNG TIN CHUYẾN ĐI */}
-            <Text style={styles.sectionTitle}>📅 Thông tin chuyến đi</Text>
-            <View style={styles.row}>
-              <TouchableOpacity style={styles.inputGroup} onPress={() => { setPickerMode('date'); setShowDatePicker(true); }}>
-                <View pointerEvents="none">
-                  <TextInput label="Ngày ghé" value={formDate} editable={false} mode="outlined" right={<TextInput.Icon icon="calendar" />} />
-                </View>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.inputGroup} onPress={() => { setPickerMode('time'); setShowTimePicker(true); }}>
-                <View pointerEvents="none">
-                  <TextInput label="Giờ (Tùy chọn)" value={formTime} editable={false} mode="outlined" right={<TextInput.Icon icon="clock" />} />
-                </View>
+          <View style={styles.modernBottomSheet}>
+            <View style={styles.bottomSheetHeader}>
+              <Text style={styles.bottomSheetTitle}>{editingLocation ? 'Sửa địa điểm' : 'Thêm địa điểm mới'}</Text>
+              <TouchableOpacity onPress={() => setFormVisible(false)} style={styles.closeBtn}>
+                <X color="#94A3B8" size={24} />
               </TouchableOpacity>
             </View>
-            <TextInput label="Chi phí dự kiến (VNĐ)" value={formCost} onChangeText={setFormCost} keyboardType="numeric" mode="outlined" style={styles.input} />
 
-            <Divider style={styles.divider} />
+            <ScrollView style={styles.bottomSheetScroll} showsVerticalScrollIndicator={false}>
+              
+              {/* Tên & Địa chỉ */}
+              <View style={styles.formGroup}>
+                <Text style={styles.modernLabel}>Tên địa điểm *</Text>
+                <View style={styles.modernInputWrap}>
+                  <RNTextInput style={styles.modernInput} placeholder="Nhập tên..." placeholderTextColor="#94A3B8" value={formName} onChangeText={setFormName} />
+                </View>
+              </View>
 
-            {/* ⭐ ĐÁNH GIÁ */}
-            <Text style={styles.sectionTitle}>⭐ Đánh giá</Text>
-            <View style={styles.starRow}>
-              {[1, 2, 3, 4, 5].map(star => (
-                <TouchableOpacity key={star} onPress={() => setFormRating(star.toString())}>
-                  <Star size={32} color={parseInt(formRating) >= star ? '#F59E0B' : '#CBD5E1'} fill={parseInt(formRating) >= star ? '#F59E0B' : 'transparent'} />
+              <View style={styles.formGroup}>
+                <Text style={styles.modernLabel}>Địa chỉ</Text>
+                <View style={styles.modernInputWrap}>
+                  <RNTextInput style={styles.modernInput} placeholder="Nhập địa chỉ..." placeholderTextColor="#94A3B8" value={formAddress} onChangeText={setFormAddress} />
+                </View>
+              </View>
+
+              {/* Danh mục */}
+              <View style={styles.formGroup}>
+                <Text style={styles.modernLabel}>Danh mục</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row', marginTop: 8 }}>
+                  {CATEGORIES.map(cat => (
+                    <TouchableOpacity key={cat} onPress={() => setFormCategory(cat)} style={[styles.modernChip, formCategory === cat && styles.modernChipActive]}>
+                      <Text style={[styles.modernChipTxt, formCategory === cat && styles.modernChipTxtActive]}>{cat}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+
+              {/* Thông tin chuyến đi */}
+              <View style={styles.row}>
+                <View style={[styles.formGroup, { flex: 1, marginRight: 12 }]}>
+                  <Text style={styles.modernLabel}>Ngày ghé</Text>
+                  <TouchableOpacity style={styles.modernInputWrap} onPress={() => { setPickerMode('date'); setShowDatePicker(true); }}>
+                    <Text style={styles.modernInputTxt}>{formDate || 'Chọn ngày'}</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={[styles.formGroup, { flex: 1 }]}>
+                  <Text style={styles.modernLabel}>Giờ</Text>
+                  <TouchableOpacity style={styles.modernInputWrap} onPress={() => { setPickerMode('time'); setShowTimePicker(true); }}>
+                    <Text style={styles.modernInputTxt}>{formTime || 'Tùy chọn'}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.modernLabel}>Chi phí dự kiến (VNĐ)</Text>
+                <View style={styles.modernInputWrap}>
+                  <RNTextInput style={styles.modernInput} keyboardType="numeric" placeholder="VD: 150000" placeholderTextColor="#94A3B8" value={formCost} onChangeText={setFormCost} />
+                </View>
+              </View>
+
+              {/* Đánh giá rút gọn */}
+              <View style={styles.formGroup}>
+                 <Text style={styles.modernLabel}>Nhận xét</Text>
+                 <View style={[styles.modernInputWrap, { height: 100, alignItems: 'flex-start', paddingTop: 12 }]}>
+                   <RNTextInput style={[styles.modernInput, { height: '100%', textAlignVertical: 'top' }]} multiline placeholder="Cảm nhận của bạn..." placeholderTextColor="#94A3B8" value={formReview} onChangeText={setFormReview} />
+                 </View>
+              </View>
+
+              {/* Hình ảnh */}
+              <View style={styles.formGroup}>
+                <Text style={styles.modernLabel}>Hình ảnh đính kèm</Text>
+                <TouchableOpacity style={styles.modernImagePicker} onPress={pickImage}>
+                  {formImage ? (
+                    <Image source={{ uri: formImage }} style={styles.modernPreviewImage} />
+                  ) : (
+                    <View style={styles.modernImagePlaceholder}>
+                      <Camera size={28} color="#94A3B8" />
+                      <Text style={styles.modernImagePlaceholderTxt}>Chạm để thêm ảnh</Text>
+                    </View>
+                  )}
                 </TouchableOpacity>
-              ))}
-            </View>
+              </View>
+
+              <View style={{ height: 40 }} />
+            </ScrollView>
             
-            <View style={styles.row}>
-              <View style={styles.inputGroup}>
-                <Text style={styles.subLabel}>Tâm trạng</Text>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  {MOODS.map(m => (
-                    <TouchableOpacity key={m} onPress={() => setFormMood(m)} style={[styles.emojiBtn, formMood === m && styles.emojiBtnActive]}>
-                      <Text style={{ fontSize: 20 }}>{m}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-              <View style={styles.inputGroup}>
-                <Text style={styles.subLabel}>Thời tiết</Text>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  {WEATHERS.map(w => (
-                    <TouchableOpacity key={w} onPress={() => setFormWeather(w)} style={[styles.emojiBtn, formWeather === w && styles.emojiBtnActive]}>
-                      <Text style={{ fontSize: 20 }}>{w}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
+            <View style={styles.bottomSheetActions}>
+               {!editingLocation && (
+                 <TouchableOpacity style={[styles.modernSaveBtn, { flex: 1, backgroundColor: '#F1F5F9', marginRight: 12 }]} onPress={() => handleSaveLocation(true)}>
+                   <Text style={[styles.modernSaveBtnTxt, { color: '#475569' }]}>Lưu & Thêm</Text>
+                 </TouchableOpacity>
+               )}
+               <TouchableOpacity style={[styles.modernSaveBtn, { flex: editingLocation ? 1 : 2 }]} onPress={() => handleSaveLocation(false)}>
+                 <Text style={styles.modernSaveBtnTxt}>{editingLocation ? 'Cập nhật' : 'Lưu địa điểm'}</Text>
+               </TouchableOpacity>
             </View>
-
-            <TextInput label="Nhận xét (tối đa 1000 ký tự)" value={formReview} onChangeText={setFormReview} mode="outlined" multiline numberOfLines={3} style={styles.input} maxLength={1000} />
-
-            <Divider style={styles.divider} />
-
-            {/* 🖼️ HÌNH ẢNH */}
-            <Text style={styles.sectionTitle}>🖼️ Hình ảnh & Khác</Text>
-            <TouchableOpacity style={styles.imagePicker} onPress={pickImage}>
-              {formImage ? (
-                <Image source={{ uri: formImage }} style={styles.previewImage} />
-              ) : (
-                <View style={styles.imagePlaceholder}>
-                  <Camera size={32} color="#94A3B8" />
-                  <Text style={{ color: '#64748B', marginTop: 8 }}>Chạm để tải ảnh lên</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.favToggle} onPress={() => setFormIsFav(!formIsFav)}>
-              <Heart size={24} color={formIsFav ? "#EF4444" : "#94A3B8"} fill={formIsFav ? "#EF4444" : "transparent"} />
-              <Text style={{ marginLeft: 8, color: formIsFav ? '#EF4444' : '#64748B', fontWeight: 'bold' }}>Đánh dấu là Địa điểm Yêu thích</Text>
-            </TouchableOpacity>
-
-            <View style={{ height: 40 }} />
-          </ScrollView>
-          
-          <View style={styles.formDialogActions}>
-            {!editingLocation && (
-              <Button mode="outlined" loading={formSaving} onPress={() => handleSaveLocation(true)} style={{ flex: 1, marginRight: 8 }}>Lưu & Thêm</Button>
-            )}
-            <Button mode="contained" loading={formSaving} onPress={() => handleSaveLocation(false)} style={{ flex: 1, backgroundColor: '#3B82F6' }}>{editingLocation ? 'Cập nhật' : 'Lưu địa điểm'}</Button>
           </View>
-        </Dialog>
-      </Portal>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* Date/Time Pickers */}
       {(showDatePicker || showTimePicker) && (
@@ -870,6 +1001,16 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 5, position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 },
+  
+  searchResultsWrap: { backgroundColor: '#fff', borderRadius: 12, marginTop: 8, paddingVertical: 8, shadowColor: '#000', shadowOffset: {width:0, height:4}, shadowOpacity: 0.1, shadowRadius: 12, elevation: 5, maxHeight: 250 },
+  searchResultItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  searchResultName: { fontSize: 15, fontWeight: '600', color: '#1E293B', marginBottom: 4 },
+  searchResultAddress: { fontSize: 12, color: '#64748B' },
+  
+  previewConfirmWrap: { position: 'absolute', left: 20, right: 20, alignItems: 'center', zIndex: 10 },
+  previewConfirmBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#3B82F6', paddingHorizontal: 24, paddingVertical: 14, borderRadius: 28, shadowColor: '#3B82F6', shadowOffset: {width:0, height:6}, shadowOpacity: 0.3, shadowRadius: 12, elevation: 8 },
+  previewConfirmIcon: { marginRight: 8 },
+  previewConfirmTxt: { fontSize: 16, fontWeight: '700', color: '#fff' },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -925,6 +1066,29 @@ const styles = StyleSheet.create({
   reviewText: { fontSize: 14, color: '#334155', fontStyle: 'italic', lineHeight: 20 },
   sheetActions: { flexDirection: 'row', gap: 12, marginBottom: 40 },
   actionBtn: { flex: 1, borderRadius: 100 },
+  
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.4)' },
+  modernBottomSheet: { backgroundColor: '#ffffff', borderTopLeftRadius: 32, borderTopRightRadius: 32, paddingHorizontal: 24, paddingVertical: 20, maxHeight: height * 0.85, shadowColor: '#000', shadowOffset: {width:0, height:-10}, shadowOpacity: 0.1, shadowRadius: 20, elevation: 20 },
+  bottomSheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  bottomSheetTitle: { fontSize: 20, fontWeight: '800', color: '#0F172A' },
+  closeBtn: { width: 36, height: 36, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F1F5F9', borderRadius: 18 },
+  bottomSheetScroll: { paddingBottom: 20 },
+  formGroup: { marginBottom: 20 },
+  modernLabel: { fontSize: 14, fontWeight: '700', color: '#334155', marginBottom: 8 },
+  modernInputWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: 16, paddingHorizontal: 16, height: 54, borderWidth: 1, borderColor: '#E2E8F0' },
+  modernInput: { flex: 1, height: '100%', fontSize: 15, color: '#0F172A', backgroundColor: 'transparent' },
+  modernInputTxt: { fontSize: 15, color: '#0F172A' },
+  modernChip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, backgroundColor: '#F1F5F9', marginRight: 10, borderWidth: 1, borderColor: 'transparent' },
+  modernChipActive: { backgroundColor: '#EFF6FF', borderColor: '#3B82F6' },
+  modernChipTxt: { fontSize: 14, fontWeight: '600', color: '#64748B' },
+  modernChipTxtActive: { color: '#3B82F6' },
+  modernImagePicker: { height: 160, backgroundColor: '#F8FAFC', borderRadius: 20, borderWidth: 2, borderColor: '#E2E8F0', borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  modernImagePlaceholder: { alignItems: 'center' },
+  modernImagePlaceholderTxt: { fontSize: 14, color: '#64748B', marginTop: 8, fontWeight: '500' },
+  modernPreviewImage: { width: '100%', height: '100%', resizeMode: 'cover' },
+  bottomSheetActions: { flexDirection: 'row', marginTop: 10 },
+  modernSaveBtn: { backgroundColor: '#3B82F6', borderRadius: 16, height: 56, justifyContent: 'center', alignItems: 'center' },
+  modernSaveBtnTxt: { fontSize: 16, fontWeight: '700', color: '#fff' },
   formDialog: { backgroundColor: '#fff', borderRadius: 16, marginHorizontal: 16, maxHeight: '85%' },
   formDialogHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
   formDialogTitle: { fontSize: 18, fontWeight: 'bold', color: '#0F172A' },
@@ -948,4 +1112,20 @@ const styles = StyleSheet.create({
   formDialogActions: { flexDirection: 'row', padding: 16, borderTopWidth: 1, borderTopColor: '#E2E8F0', backgroundColor: '#fff', borderBottomLeftRadius: 16, borderBottomRightRadius: 16 },
   crosshairContainer: { position: 'absolute', top: '50%', left: '50%', transform: [{ translateX: -20 }, { translateY: -40 }], alignItems: 'center', zIndex: 10 },
   crosshairText: { position: 'absolute', top: 50, backgroundColor: 'rgba(0,0,0,0.7)', color: '#fff', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, fontSize: 12, overflow: 'hidden', width: 200, textAlign: 'center' },
+
+  // New styles for Map controls & markers
+  mapControls: { position: 'absolute', right: 16, gap: 12, alignItems: 'center' },
+  controlBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.95)', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 5 },
+  markerContainer: { alignItems: 'center', justifyContent: 'center' },
+  markerIconBox: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 },
+  markerImage: { width: 44, height: 44, borderRadius: 22, borderWidth: 3, borderColor: '#fff' },
+  markerSelected: { transform: [{ scale: 1.2 }] },
+  markerTail: { width: 0, height: 0, borderLeftWidth: 6, borderRightWidth: 6, borderTopWidth: 8, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: '#fff', marginTop: -2 },
+  summaryCard: { padding: 24, paddingBottom: 40 },
+  summaryTitle: { fontSize: 18, fontWeight: 'bold', color: '#1E293B', textAlign: 'center', marginBottom: 20 },
+  summaryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  summaryItem: { flex: 1, alignItems: 'center' },
+  summaryDivider: { width: 1, height: 40, backgroundColor: '#E2E8F0', marginHorizontal: 16 },
+  summaryValue: { fontSize: 24, fontWeight: 'bold', color: '#0F172A', marginTop: 8 },
+  summaryLabel: { fontSize: 13, color: '#64748B', marginTop: 4 },
 });
