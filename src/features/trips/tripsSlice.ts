@@ -5,10 +5,14 @@ export interface TripActivity {
   time: string;
   description: string;
   location: string;
+  latitude?: number;
+  longitude?: number;
+  estimatedCost?: number;
 }
 
 export interface TripDay {
   day: number;
+  theme?: string;
   activities: TripActivity[];
 }
 
@@ -64,7 +68,7 @@ export const fetchTrips = createAsyncThunk('trips/fetchTrips', async (userId: st
       startDate: item.start_date,
       endDate: item.end_date,
       budget: item.budget,
-      totalDistance: item.trip_locations ? item.trip_locations.reduce((sum: number, loc: any) => sum + (loc.distance_from_previous || 0), 0) : 0,
+      totalDistance: (item.trip_locations ? item.trip_locations.reduce((sum: number, loc: any) => sum + (loc.distance_from_previous || 0), 0) : 0) || item.total_distance || 0,
       totalLocations: item.trip_locations ? item.trip_locations.length : 0,
       totalCost: item.total_cost,
       status: item.status,

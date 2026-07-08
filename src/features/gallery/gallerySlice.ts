@@ -23,9 +23,13 @@ const initialState: GalleryState = {
 
 export const fetchGallery = createAsyncThunk(
   'gallery/fetchGallery',
-  async (_, { rejectWithValue }) => {
+  async (userId: string, { rejectWithValue }) => {
     try {
-      const { data, error } = await supabase.from('gallery').select('*').order('created_at', { ascending: false });
+      const { data, error } = await supabase
+        .from('gallery')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
       if (error) throw error;
       
       const imagesList = data.map(doc => ({

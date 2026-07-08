@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Provider, useDispatch, useSelector } from 'react-redux';
-import { store, AppDispatch, RootState } from './src/features/store';
+import { store, persistor, AppDispatch, RootState } from './src/features/store';
+import { PersistGate } from 'redux-persist/integration/react';
 import { supabase } from './src/config/supabase';
 import { setUser } from './src/features/auth/authSlice';
 import RootNavigator from './src/navigation/RootNavigator';
@@ -57,7 +58,9 @@ function AppContent() {
 export default function App() {
   return (
     <Provider store={store}>
-      <AppContentWrapper />
+      <PersistGate loading={null} persistor={persistor}>
+        <AppContentWrapper />
+      </PersistGate>
     </Provider>
   );
 }

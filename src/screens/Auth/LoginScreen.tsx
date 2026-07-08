@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, ImageBackground, StatusBar, ScrollView } from 'react-native';
+import { View, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, ImageBackground, StatusBar, ScrollView, Dimensions } from 'react-native';
 import { TextInput, Button, Text, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../config/supabase';
@@ -8,8 +8,11 @@ import * as Google from 'expo-auth-session/providers/google';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../features/store';
 import { translations } from '../../constants/translations';
+import { LinearGradient } from 'expo-linear-gradient';
 
 WebBrowser.maybeCompleteAuthSession();
+
+const { height } = Dimensions.get('window');
 
 export default function LoginScreen() {
   const theme = useTheme();
@@ -119,69 +122,83 @@ export default function LoginScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: '#fff' }]}>
-      <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
+    <ImageBackground 
+      source={{ uri: 'https://images.unsplash.com/photo-1506197603052-3cc9c3a201bd?w=800' }} 
+      style={styles.container}
+    >
+      <LinearGradient
+        colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.7)', 'rgba(15,23,42,0.95)']}
+        style={styles.gradientOverlay}
+      />
+      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
       <KeyboardAvoidingView 
-        style={[styles.keyboardView, { paddingTop: insets.top + 40 }]} 
+        style={styles.keyboardView} 
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <ScrollView showsVerticalScrollIndicator={false}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 20 }]}>
+          
+          <View style={styles.header}>
+            <Text variant="displaySmall" style={styles.appTitle}>TraGo</Text>
+            <Text variant="bodyLarge" style={styles.appSubtitle}>{texts.welcomeSubtitle}</Text>
+          </View>
+
           <View style={styles.formContainer}>
-            <Text variant="headlineLarge" style={styles.title}>
-              {texts.welcomeTitle}
-            </Text>
-            <Text variant="bodyLarge" style={styles.subtitle}>
-              {texts.welcomeSubtitle}
+            <Text variant="headlineSmall" style={styles.title}>
+              {isRegister ? texts.register : texts.login}
             </Text>
 
             {errorMsg ? <Text style={styles.errorText}>{errorMsg}</Text> : null}
 
             {isRegister && (
-              <TextInput
-                label={texts.fullName}
+              <TextInput autoCorrect={false} spellCheck={false}                label={texts.fullName}
                 value={fullName}
                 onChangeText={setFullName}
                 mode="outlined"
                 style={styles.input}
-                outlineColor="#e2e8f0"
-                activeOutlineColor="#3B82F6"
+                outlineColor="transparent"
+                activeOutlineColor="#4F46E5"
+                textColor="#0F172A"
+                theme={{ colors: { background: '#F8FAFC' }, roundness: 12 }}
               />
             )}
 
-            <TextInput
-              label={texts.email}
+            <TextInput autoCorrect={false} spellCheck={false}              label={texts.email}
               value={email}
               onChangeText={setEmail}
               mode="outlined"
               keyboardType="email-address"
               autoCapitalize="none"
               style={styles.input}
-              outlineColor="#e2e8f0"
-              activeOutlineColor="#3B82F6"
+              outlineColor="transparent"
+              activeOutlineColor="#4F46E5"
+              textColor="#0F172A"
+              theme={{ colors: { background: '#F8FAFC' }, roundness: 12 }}
             />
 
-            <TextInput
-              label={texts.password}
+            <TextInput autoCorrect={false} spellCheck={false}              label={texts.password}
               value={password}
               onChangeText={setPassword}
               mode="outlined"
               secureTextEntry={!showPassword}
               style={styles.input}
-              outlineColor="#e2e8f0"
-              activeOutlineColor="#3B82F6"
-              right={<TextInput.Icon icon={showPassword ? "eye-off" : "eye"} onPress={() => setShowPassword(!showPassword)} />}
+              outlineColor="transparent"
+              activeOutlineColor="#4F46E5"
+              textColor="#0F172A"
+              theme={{ colors: { background: '#F8FAFC' }, roundness: 12 }}
+              right={<TextInput.Icon icon={showPassword ? "eye-off" : "eye"} color="#94A3B8" onPress={() => setShowPassword(!showPassword)} />}
             />
 
             {isRegister && (
-              <TextInput
-                label={texts.confirmPassword}
+              <TextInput autoCorrect={false} spellCheck={false}                label={texts.confirmPassword}
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
                 mode="outlined"
                 secureTextEntry={!showPassword}
                 style={styles.input}
-                outlineColor="#e2e8f0"
-                activeOutlineColor="#3B82F6"
+                outlineColor="transparent"
+                activeOutlineColor="#4F46E5"
+                textColor="#0F172A"
+                theme={{ colors: { background: '#F8FAFC' }, roundness: 12 }}
               />
             )}
 
@@ -191,10 +208,10 @@ export default function LoginScreen() {
                   <View style={[styles.checkboxPlaceholder, rememberMe && styles.checkboxActive]}>
                     {rememberMe && <Text style={{color: '#fff', fontSize: 12, textAlign: 'center', lineHeight: 16}}>✓</Text>}
                   </View>
-                  <Text style={{ marginLeft: 8, color: theme.colors.secondary }}>{texts.rememberMe}</Text>
+                  <Text style={{ marginLeft: 8, color: '#64748B' }}>{texts.rememberMe}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity>
-                  <Text style={{ color: theme.colors.primary, fontWeight: '500' }}>{texts.forgotPassword}</Text>
+                  <Text style={{ color: '#4F46E5', fontWeight: '600' }}>{texts.forgotPassword}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -212,14 +229,15 @@ export default function LoginScreen() {
 
             {!isRegister && (
               <View style={styles.socialRow}>
-                <TouchableOpacity style={styles.socialBtn} onPress={() => promptAsync()} activeOpacity={0.7}>
+                <TouchableOpacity style={styles.socialBtn} onPress={() => setErrorMsg('Tính năng đăng nhập Google đang được phát triển')} activeOpacity={0.8}>
                   <ImageBackground source={{ uri: 'https://cdn-icons-png.flaticon.com/512/2991/2991148.png' }} style={styles.socialIcon} />
+                  <Text style={styles.socialBtnText}>Tiếp tục với Google</Text>
                 </TouchableOpacity>
               </View>
             )}
 
             <View style={styles.footerRow}>
-              <Text style={{ color: theme.colors.secondary }}>
+              <Text style={{ color: '#64748B' }}>
                 {isRegister ? texts.alreadyHaveAccount : texts.noAccount}
               </Text>
               <TouchableOpacity onPress={() => setIsRegister(!isRegister)}>
@@ -228,11 +246,10 @@ export default function LoginScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
-
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </View>
+    </ImageBackground>
   );
 }
 
@@ -240,72 +257,110 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  gradientOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+  },
   keyboardView: {
     flex: 1,
   },
-  formContainer: {
-    paddingHorizontal: 24,
-    paddingBottom: 40,
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
   },
-  title: {
-    fontWeight: 'bold',
-    color: '#0f172a',
+  header: {
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  appTitle: {
+    color: '#fff',
+    fontWeight: '900',
+    letterSpacing: 2,
     marginBottom: 8,
   },
-  subtitle: {
-    color: '#64748b',
-    marginBottom: 40,
+  appSubtitle: {
+    color: 'rgba(255,255,255,0.8)',
+    textAlign: 'center',
+    paddingHorizontal: 40,
+  },
+  formContainer: {
+    backgroundColor: '#fff',
+    marginHorizontal: 24,
+    borderRadius: 32,
+    paddingHorizontal: 24,
+    paddingTop: 32,
+    paddingBottom: 32,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+    elevation: 8,
+    borderCurve: 'continuous',
+  },
+  title: {
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 24,
+    textAlign: 'center',
   },
   input: {
     marginBottom: 16,
-    backgroundColor: '#fff',
+    backgroundColor: '#F8FAFC',
+    height: 54,
   },
   rememberRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 30,
+    marginBottom: 24,
   },
   checkboxPlaceholder: {
-    width: 20,
-    height: 20,
+    width: 22,
+    height: 22,
     borderWidth: 2,
-    borderColor: '#3B82F6',
-    borderRadius: 4,
+    borderColor: '#CBD5E1',
+    borderRadius: 6,
     backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
   },
   checkboxActive: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: '#4F46E5',
+    borderColor: '#4F46E5',
   },
   authButton: {
-    borderRadius: 30,
+    borderRadius: 16,
     paddingVertical: 6,
-    backgroundColor: '#3B82F6',
-    marginBottom: 30,
+    backgroundColor: '#4F46E5',
+    marginBottom: 24,
   },
   authButtonLabel: {
     fontSize: 16,
     fontWeight: 'bold',
   },
   socialRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginBottom: 40,
+    marginBottom: 32,
   },
   socialBtn: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#f1f5f9',
-    justifyContent: 'center',
+    flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 10,
+    justifyContent: 'center',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 16,
+    paddingVertical: 14,
+    gap: 12,
   },
   socialIcon: {
     width: 24,
     height: 24,
+  },
+  socialBtnText: {
+    fontWeight: '600',
+    color: '#334155',
+    fontSize: 15,
   },
   footerRow: {
     flexDirection: 'row',
@@ -313,12 +368,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   footerLink: {
-    color: '#3B82F6',
-    fontWeight: 'bold',
+    color: '#4F46E5',
+    fontWeight: '700',
   },
   errorText: {
-    color: '#ef4444',
+    color: '#EF4444',
     marginBottom: 16,
     textAlign: 'center',
+    backgroundColor: '#FEF2F2',
+    padding: 10,
+    borderRadius: 8,
   }
 });

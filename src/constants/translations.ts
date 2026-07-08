@@ -43,6 +43,11 @@ export type Translations = {
     locations: string;
     distance: string;
     userPlaceholder: string;
+    editProfile: string;
+    updateSuccess: string;
+    updateError: string;
+    save: string;
+    fullName: string;
   };
   tabs: {
     home: string;
@@ -104,6 +109,13 @@ export type Translations = {
     noLocationsText: string;
     noExpenses: string;
     noJournal: string;
+    aiWeatherTitle: string;
+    aiWeatherButton: string;
+    aiWeatherLoading: string;
+    aiWeatherError: string;
+    aiExpenseTitle: string;
+    aiExpenseButton: string;
+    aiExpenseLoading: string;
   };
   auth: {
     welcomeTitle: string;
@@ -149,6 +161,11 @@ export type Translations = {
     hashtagsLabel: string;
     emptyPrompt: string;
     generateError: string;
+    loadingText: string;
+    copy: string;
+    copiedSuccess: string;
+    share: string;
+    shareError: string;
   };
   aiPlanner: {
     back: string;
@@ -168,6 +185,11 @@ export type Translations = {
     daysRequired: string;
     budgetRequired: string;
     close: string;
+    defaultTitle: string;
+    defaultDesc: string;
+    saveSuccess: string;
+    recreate: string;
+    saveTrip: string;
   };
   common: {
     kilometers: string;
@@ -235,6 +257,11 @@ export const translations: Record<LanguageCode, Translations> = {
       locations: 'Địa điểm',
       distance: 'Quãng đường',
       userPlaceholder: 'Người dùng',
+      editProfile: 'Chỉnh sửa hồ sơ',
+      updateSuccess: 'Cập nhật thành công!',
+      updateError: 'Lỗi cập nhật',
+      save: 'Lưu thay đổi',
+      fullName: 'Họ và tên',
     },
     tabs: {
       home: 'Trang chủ',
@@ -296,6 +323,13 @@ export const translations: Record<LanguageCode, Translations> = {
       noLocationsText: 'Hãy thêm điểm đến hoặc lịch trình để bắt đầu',
       noExpenses: 'Chưa có chi phí nào.',
       noJournal: 'Chưa có nhật ký nào.',
+      aiWeatherTitle: 'Trợ lý Thời tiết & Lịch trình',
+      aiWeatherButton: 'Phân tích Thời tiết',
+      aiWeatherLoading: 'Đang phân tích thời tiết...',
+      aiWeatherError: 'Không thể lấy thông tin thời tiết lúc này.',
+      aiExpenseTitle: 'Trợ lý Tài chính AI',
+      aiExpenseButton: 'Phân tích Chi tiêu',
+      aiExpenseLoading: 'Đang phân tích chi tiêu...',
     },
     auth: {
       welcomeTitle: 'Chào mừng trở lại! 👋',
@@ -341,6 +375,11 @@ export const translations: Record<LanguageCode, Translations> = {
       hashtagsLabel: 'Hashtags',
       emptyPrompt: 'Vui lòng nhập mô tả ngắn gọn về bức ảnh.',
       generateError: 'Không thể tạo mô tả ảnh.',
+      loadingText: 'Đang tạo mô tả...',
+      copy: 'Sao chép',
+      copiedSuccess: 'Sao chép thành công!',
+      share: 'Chia sẻ',
+      shareError: 'Lỗi khi chia sẻ',
     },
     aiPlanner: {
       back: 'Quay lại',
@@ -360,6 +399,11 @@ export const translations: Record<LanguageCode, Translations> = {
       daysRequired: 'Số ngày không được để trống',
       budgetRequired: 'Ngân sách dự kiến',
       close: 'Đóng',
+      defaultTitle: 'Khám phá',
+      defaultDesc: 'Lịch trình được tạo bởi AI',
+      saveSuccess: 'Lịch trình đã được lưu!',
+      recreate: 'Tạo lại',
+      saveTrip: 'Lưu lịch trình',
     },
     common: {
       kilometers: 'km',
@@ -425,6 +469,11 @@ export const translations: Record<LanguageCode, Translations> = {
       locations: 'Locations',
       distance: 'Distance',
       userPlaceholder: 'User',
+      editProfile: 'Edit Profile',
+      updateSuccess: 'Updated successfully!',
+      updateError: 'Update failed',
+      save: 'Save Changes',
+      fullName: 'Full Name',
     },
     tabs: {
       home: 'Home',
@@ -472,104 +521,121 @@ export const translations: Record<LanguageCode, Translations> = {
       statusOngoing: 'Ongoing',
       statusCompleted: 'Completed',
     },
-    tripDetail: {
-      distanceLabel: 'Distance',
-      costLabel: 'Cost',
-      destinationsLabel: 'Destinations',
-      photosLabel: 'Photos',
-      itinerary: 'Itinerary',
-      map: 'Map',
-      expenses: 'Expenses',
-      journal: 'Journal',
-      editTrip: 'Edit trip',
-      noLocations: 'No destinations yet.',
-      noLocationsText: 'Add a stop to get started',
-      noExpenses: 'No expenses yet.',
-      noJournal: 'No journal entries yet.',
+      tripDetail: {
+        distanceLabel: 'Distance',
+        costLabel: 'Cost',
+        destinationsLabel: 'Destinations',
+        photosLabel: 'Photos',
+        itinerary: 'Itinerary',
+        map: 'Map',
+        expenses: 'Expenses',
+        journal: 'Journal',
+        editTrip: 'Edit trip',
+        noLocations: 'No destinations yet.',
+        noLocationsText: 'Add a stop to get started',
+        noExpenses: 'No expenses yet.',
+        noJournal: 'No journal entries yet.',
+        aiWeatherTitle: 'AI Weather & Itinerary Advisor',
+        aiWeatherButton: 'Analyze Weather',
+        aiWeatherLoading: 'Analyzing weather...',
+        aiWeatherError: 'Unable to fetch weather info right now.',
+        aiExpenseTitle: 'AI Financial Advisor',
+        aiExpenseButton: 'Analyze Expenses',
+        aiExpenseLoading: 'Analyzing expenses...',
+      },
+      auth: {
+        welcomeTitle: 'Welcome back! 👋',
+        welcomeSubtitle: 'Sign in to continue your journey',
+        fullName: 'Full name',
+        email: 'Email',
+        password: 'Password',
+        confirmPassword: 'Confirm password',
+        rememberMe: 'Remember me',
+        forgotPassword: 'Forgot password?',
+        login: 'Sign in',
+        register: 'Sign up',
+        googleLogin: 'Continue with Google',
+        alreadyHaveAccount: 'Already have an account?',
+        noAccount: 'Don’t have an account?',
+        loginNow: 'Sign in now',
+        registerNow: 'Sign up now',
+        fullNameRequired: 'Please enter your full name.',
+        passwordMismatch: 'Passwords do not match.',
+        passwordTooShort: 'Password is too weak! Minimum 8 characters required.',
+        emailPasswordRequired: 'Please enter your email and password',
+        loginFailed: 'Sign in failed',
+        registerFailed: 'Sign up failed',
+        googleFailed: 'Google sign-in failed',
+        googleCancelled: 'Google sign-in was cancelled or failed.',
+        googleTokenMissing: 'Error: No Google token received.',
+      },
+      gallery: {
+        title: 'Saved photos',
+        all: 'All',
+        location: 'Location',
+        date: 'Date',
+        uploadSuccess: 'Photo uploaded successfully!',
+        loginRequired: 'Please sign in to upload a photo.',
+        uploadError: 'Failed to upload photo.',
+      },
+      photoDescription: {
+        title: 'AI Photo Description',
+        promptLabel: 'Short description of the photo',
+        placeholder: 'Example: Sunset in Hoi An, lantern lights glowing',
+        button: 'Generate AI description',
+        resultLabel: 'Suggested description',
+        hashtagsLabel: 'Hashtags',
+        emptyPrompt: 'Please enter a short description of the photo.',
+        generateError: 'Unable to generate photo description.',
+        loadingText: 'Generating description...',
+        copy: 'Copy',
+        copiedSuccess: 'Copied successfully!',
+        share: 'Share',
+        shareError: 'Error sharing',
+      },
+      aiPlanner: {
+        back: 'Back',
+        title: 'Create AI Itinerary',
+        subtitle: 'Enter your trip details and let Gemini build a detailed plan for you!',
+        destinationLabel: 'Destination (e.g. Da Lat, Kyoto)',
+        daysLabel: 'Days (e.g. 3)',
+        budgetLabel: 'Budget (VND, e.g. 5000000)',
+        interestsLabel: 'Interests (e.g. food, nature)',
+        loadingText: 'Gemini is thinking...',
+        button: 'Create Automatic Itinerary',
+        suggestionsTitle: 'Suggestions for you',
+        suggestions: ['Honeymoon', 'Adventure trip', 'Family', 'Relaxation', 'Photography'],
+        loginRequired: 'Please sign in to create a trip.',
+        createError: 'Something went wrong while creating the AI itinerary.',
+        destinationRequired: 'Destination cannot be empty',
+        daysRequired: 'Days cannot be empty',
+        budgetRequired: 'Estimated budget',
+        close: 'Close',
+        defaultTitle: 'Explore',
+        defaultDesc: 'AI generated itinerary',
+        saveSuccess: 'Itinerary saved!',
+        recreate: 'Recreate',
+        saveTrip: 'Save Trip',
+      },
+      common: {
+        kilometers: 'km',
+        miles: 'mi',
+        appInfo: 'TraGo is a personal trip planner app for saving trips, photos, and travel notes.',
+        syncData: 'Sync device data',
+        receiveNotifications: 'Receive app notifications',
+        logout: 'Logout',
+        save: 'Save',
+        cancel: 'Cancel',
+        close: 'Close',
+        retry: 'Retry',
+        back: 'Back',
+        loading: 'Loading',
+        days: 'days',
+        locations: 'places',
+        photos: 'Photos',
+        distance: 'Distance',
+        edit: 'Edit',
+        delete: 'Delete',
+      },
     },
-    auth: {
-      welcomeTitle: 'Welcome back! 👋',
-      welcomeSubtitle: 'Sign in to continue your journey',
-      fullName: 'Full name',
-      email: 'Email',
-      password: 'Password',
-      confirmPassword: 'Confirm password',
-      rememberMe: 'Remember me',
-      forgotPassword: 'Forgot password?',
-      login: 'Sign in',
-      register: 'Sign up',
-      googleLogin: 'Continue with Google',
-      alreadyHaveAccount: 'Already have an account?',
-      noAccount: 'Don’t have an account?',
-      loginNow: 'Sign in now',
-      registerNow: 'Sign up now',
-      fullNameRequired: 'Please enter your full name.',
-      passwordMismatch: 'Passwords do not match.',
-      passwordTooShort: 'Password is too weak! Minimum 8 characters required.',
-      emailPasswordRequired: 'Please enter your email and password',
-      loginFailed: 'Sign in failed',
-      registerFailed: 'Sign up failed',
-      googleFailed: 'Google sign-in failed',
-      googleCancelled: 'Google sign-in was cancelled or failed.',
-      googleTokenMissing: 'Error: No Google token received.',
-    },
-    gallery: {
-      title: 'Saved photos',
-      all: 'All',
-      location: 'Location',
-      date: 'Date',
-      uploadSuccess: 'Photo uploaded successfully!',
-      loginRequired: 'Please sign in to upload a photo.',
-      uploadError: 'Failed to upload photo.',
-    },
-    photoDescription: {
-      title: 'AI Photo Description',
-      promptLabel: 'Short description of the photo',
-      placeholder: 'Example: Sunset in Hoi An, lantern lights glowing',
-      button: 'Generate AI description',
-      resultLabel: 'Suggested description',
-      hashtagsLabel: 'Hashtags',
-      emptyPrompt: 'Please enter a short description of the photo.',
-      generateError: 'Unable to generate photo description.',
-    },
-    aiPlanner: {
-      back: 'Back',
-      title: 'Create AI Itinerary',
-      subtitle: 'Enter your trip details and let Gemini build a detailed plan for you!',
-      destinationLabel: 'Destination (e.g. Da Lat, Kyoto)',
-      daysLabel: 'Days (e.g. 3)',
-      budgetLabel: 'Budget (VND, e.g. 5000000)',
-      interestsLabel: 'Interests (e.g. food, nature)',
-      loadingText: 'Gemini is thinking...',
-      button: 'Create Automatic Itinerary',
-      suggestionsTitle: 'Suggestions for you',
-      suggestions: ['Honeymoon', 'Adventure trip', 'Family', 'Relaxation', 'Photography'],
-      loginRequired: 'Please sign in to create a trip.',
-      createError: 'Something went wrong while creating the AI itinerary.',
-      destinationRequired: 'Destination cannot be empty',
-      daysRequired: 'Days cannot be empty',
-      budgetRequired: 'Estimated budget',
-      close: 'Close',
-    },
-    common: {
-      kilometers: 'km',
-      miles: 'mi',
-      appInfo: 'TraGo is a personal trip planner app for saving trips, photos, and travel notes.',
-      syncData: 'Sync device data',
-      receiveNotifications: 'Receive app notifications',
-      logout: 'Logout',
-      save: 'Save',
-      cancel: 'Cancel',
-      close: 'Close',
-      retry: 'Retry',
-      back: 'Back',
-      loading: 'Loading',
-      days: 'days',
-      locations: 'places',
-      photos: 'Photos',
-      distance: 'Distance',
-      edit: 'Edit',
-      delete: 'Delete',
-    },
-  },
-};
+  };
