@@ -5,6 +5,7 @@ import { Home, Map as MapIcon, Image as ImageIcon, User, Sparkles } from 'lucide
 import { useSelector } from 'react-redux';
 import { RootState } from '../features/store';
 import { translations } from '../constants/translations';
+import { Platform } from 'react-native';
 
 import DashboardScreen from '../screens/Dashboard/DashboardScreen';
 import TripsScreen from '../screens/Trips/TripsScreen';
@@ -23,16 +24,25 @@ export default function MainTabNavigator() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: theme.colors.primary,
-        tabBarInactiveTintColor: theme.colors.secondary,
+        tabBarActiveTintColor: '#4F46E5', // Indigo-600
+        tabBarInactiveTintColor: '#94A3B8', // Slate-400
+        tabBarShowLabel: true,
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontWeight: '600',
+          marginTop: -4,
+          marginBottom: Platform.OS === 'ios' ? 0 : 8,
+        },
         tabBarStyle: {
-          backgroundColor: theme.colors.surface,
+          backgroundColor: '#FFFFFF',
           borderTopWidth: 0,
-          elevation: 8,
+          elevation: 12,
           shadowColor: '#000',
-          shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.1,
-          shadowRadius: 4,
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: 0.05,
+          shadowRadius: 12,
+          height: Platform.OS === 'ios' ? 88 : 68,
+          paddingTop: 8,
         },
       }}
     >
@@ -41,7 +51,7 @@ export default function MainTabNavigator() {
         component={DashboardScreen} 
         options={{
           tabBarLabel: texts.home,
-          tabBarIcon: ({ color, size }) => <Home color={color} size={size} />,
+          tabBarIcon: ({ color, size, focused }) => <Home color={color} size={focused ? 26 : 24} strokeWidth={focused ? 2.5 : 2} />,
         }}
       />
       <Tab.Screen 
@@ -49,7 +59,7 @@ export default function MainTabNavigator() {
         component={TripsScreen} 
         options={{
           tabBarLabel: texts.trips,
-          tabBarIcon: ({ color, size }) => <Sparkles color={color} size={size} />,
+          tabBarIcon: ({ color, size, focused }) => <Sparkles color={color} size={focused ? 26 : 24} strokeWidth={focused ? 2.5 : 2} />,
         }}
       />
       <Tab.Screen 
@@ -57,7 +67,7 @@ export default function MainTabNavigator() {
         component={MapScreen} 
         options={{
           tabBarLabel: texts.map,
-          tabBarIcon: ({ color, size }) => <MapIcon color={color} size={size} />,
+          tabBarIcon: ({ color, size, focused }) => <MapIcon color={color} size={focused ? 26 : 24} strokeWidth={focused ? 2.5 : 2} />,
         }}
       />
       <Tab.Screen 
@@ -65,7 +75,7 @@ export default function MainTabNavigator() {
         component={GalleryScreen} 
         options={{
           tabBarLabel: texts.gallery,
-          tabBarIcon: ({ color, size }) => <ImageIcon color={color} size={size} />,
+          tabBarIcon: ({ color, size, focused }) => <ImageIcon color={color} size={focused ? 26 : 24} strokeWidth={focused ? 2.5 : 2} />,
         }}
       />
       <Tab.Screen 
@@ -73,7 +83,7 @@ export default function MainTabNavigator() {
         component={ProfileScreen} 
         options={{
           tabBarLabel: texts.profile,
-          tabBarIcon: ({ color, size }) => <User color={color} size={size} />,
+          tabBarIcon: ({ color, size, focused }) => <User color={color} size={focused ? 26 : 24} strokeWidth={focused ? 2.5 : 2} />,
         }}
       />
     </Tab.Navigator>

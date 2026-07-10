@@ -1,13 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, Image, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions } from 'react-native';
 import { Text, useTheme, Avatar } from 'react-native-paper';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../features/store';
 import { fetchTrips } from '../../features/trips/tripsSlice';
-import { ChevronRight, Sparkles } from 'lucide-react-native';
+import { ChevronRight, Sparkles, Map, MapPin, Camera } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../config/supabase';
 import { translations } from '../../constants/translations';
+import { LinearGradient } from 'expo-linear-gradient';
+
+const { width } = Dimensions.get('window');
 
 export default function DashboardScreen({ navigation }: any) {
   const theme = useTheme() as any;
@@ -17,6 +20,7 @@ export default function DashboardScreen({ navigation }: any) {
   const settings = useSelector((state: RootState) => state.settings);
   const { items } = useSelector((state: RootState) => state.trips);
   const texts = translations[settings.language].dashboard;
+  const tripTexts = translations[settings.language].trips;
   const commonTexts = translations[settings.language].common;
 
   const [totalLocations, setTotalLocations] = useState(0);
@@ -59,6 +63,25 @@ export default function DashboardScreen({ navigation }: any) {
   const totalDistanceUnit = settings.distanceUnit === 'Miles' ? commonTexts.miles : commonTexts.kilometers;
   const recentTrip = items.length > 0 ? items[0] : null;
 
+  const formatDistance = (value?: number) => {
+    const distance = (value || 0) * (settings.distanceUnit === 'Miles' ? 0.621371 : 1);
+    return `${distance.toFixed(2)} ${totalDistanceUnit}`;
+  };
+
+  const getStatusLabel = (status?: string) => {
+    switch (status) {
+      case 'Planning':
+        return tripTexts.statusPlanning;
+      case 'Ongoing':
+        return tripTexts.statusOngoing;
+      case 'Completed':
+        return tripTexts.statusCompleted;
+      case 'Upcoming':
+      default:
+        return tripTexts.statusUpcoming;
+    }
+  };
+
   const getTripDays = (startDate?: string, endDate?: string) => {
     if (!startDate || !endDate) return 0;
     const start = new Date(startDate);
@@ -68,92 +91,140 @@ export default function DashboardScreen({ navigation }: any) {
   };
 
   return (
-    <ScrollView 
-      style={[styles.container, { backgroundColor: theme.colors.background }]} 
+    <ScrollView
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
       showsVerticalScrollIndicator={false}
-      contentContainerStyle={{ paddingTop: insets.top + 20, paddingBottom: 40 }}
+      contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: 40 }}
     >
       <View style={styles.header}>
         <View style={styles.headerText}>
-          <Text variant="headlineSmall" style={[styles.greeting, { color: theme.colors.onSurface }]}> 
+          <Text variant="headlineSmall" style={[styles.greeting, { color: theme.colors.onSurface }]}>
             {texts.greeting}, {user?.displayName?.split(' ')[0] || user?.email?.split('@')[0] || 'User'} 👋
           </Text>
-          <Text variant="bodyMedium" style={[styles.subtitle, { color: theme.colors.secondary }]}> 
+          <Text variant="bodyMedium" style={[styles.subtitle, { color: theme.colors.secondary }]}>
             {texts.subtitle}
           </Text>
         </View>
-        <Avatar.Image size={48} source={{ uri: user?.photoURL || 'https://i.pravatar.cc/150?img=68' }} />
+        <TouchableOpacity onPress={() => navigation.navigate('ProfileTab')}>
+          {user?.photoURL ? (
+            <Avatar.Image size={56} source={{ uri: user.photoURL }} style={styles.avatarShadow} />
+          ) : (
+            <Avatar.Text size={56} label={(user?.displayName || user?.email || 'U').charAt(0).toUpperCase()} style={styles.avatarShadow} />
+          )}
+        </TouchableOpacity>
       </View>
 
       <View style={styles.statsGrid}>
         <View style={styles.statsRow}>
-          <View style={[styles.statBox, { marginRight: 8 }]}>
-            <Text style={[styles.statNumber, { color: '#3B82F6' }]}>{totalTrips}</Text>
+          <View style={[styles.statBox, { backgroundColor: '#EEF2FF', marginRight: 8 }]}>
+            <View style={[styles.statIconBox, { backgroundColor: '#E0E7FF' }]}>
+               <Map color="#4F46E5" size={20} />
+            </View>
+            <Text style={[styles.statNumber, { color: '#4F46E5' }]}>{totalTrips}</Text>
             <Text style={styles.statLabel}>{texts.trips}</Text>
           </View>
-          <View style={[styles.statBox, { marginLeft: 8 }]}>
-            <Text style={[styles.statNumber, { color: '#8B5CF6' }]}>{totalLocations}</Text>
+          <View style={[styles.statBox, { backgroundColor: '#F0FDF4', marginLeft: 8 }]}>
+            <View style={[styles.statIconBox, { backgroundColor: '#DCFCE7' }]}>
+               <MapPin color="#16A34A" size={20} />
+            </View>
+            <Text style={[styles.statNumber, { color: '#16A34A' }]}>{totalLocations}</Text>
             <Text style={styles.statLabel}>{texts.locations}</Text>
           </View>
         </View>
         <View style={styles.statsRow}>
-          <View style={[styles.statBox, { marginRight: 8 }]}>
-            <Text style={[styles.statNumber, { color: '#10B981' }]}>
-              {totalDistance > 0 ? totalDistance.toLocaleString(settings.language === 'vi' ? 'vi-VN' : 'en-US') : '0'} <Text style={{fontSize: 16}}>{totalDistanceUnit}</Text>
+          <View style={[styles.statBox, { backgroundColor: '#FFF7ED', marginRight: 8 }]}>
+            <View style={[styles.statIconBox, { backgroundColor: '#FFEDD5' }]}>
+               <ChevronRight color="#EA580C" size={20} />
+            </View>
+            <Text style={[styles.statNumber, { color: '#EA580C' }]}>
+              {totalDistance.toLocaleString(settings.language === 'vi' ? 'vi-VN' : 'en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              <Text style={{fontSize: 14}}> {totalDistanceUnit}</Text>
             </Text>
             <Text style={styles.statLabel}>{texts.totalDistance}</Text>
           </View>
-          <View style={[styles.statBox, { marginLeft: 8 }]}>
-            <Text style={[styles.statNumber, { color: '#F59E0B' }]}>{totalPhotos}</Text>
+          <View style={[styles.statBox, { backgroundColor: '#FDF2F8', marginLeft: 8 }]}>
+            <View style={[styles.statIconBox, { backgroundColor: '#FCE7F3' }]}>
+               <Camera color="#DB2777" size={20} />
+            </View>
+            <Text style={[styles.statNumber, { color: '#DB2777' }]}>{totalPhotos}</Text>
             <Text style={styles.statLabel}>{texts.photos}</Text>
           </View>
         </View>
       </View>
 
       <View style={styles.sectionHeader}>
-        <Text variant="titleMedium" style={[styles.sectionTitle, { color: theme.colors.onSurface }]}> {texts.recentTrip}</Text>
+        <Text variant="titleMedium" style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>{texts.recentTrip}</Text>
+        {items.length > 0 && (
+          <TouchableOpacity onPress={() => navigation.navigate('TripsTab')}>
+            <Text style={styles.seeAllText}>See all</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
-      <TouchableOpacity 
-        activeOpacity={0.8}
+      <TouchableOpacity
+        activeOpacity={0.9}
         onPress={() => {
           if (recentTrip) {
             navigation.navigate('TripDetail', { trip: recentTrip });
           } else {
-            navigation.navigate('Trips'); // Go to trips tab if no recent trip
+            navigation.navigate('AddTrip'); // Suggest creating a trip
           }
-        }} 
-        style={[styles.recentCard, { backgroundColor: theme.colors.surface }]}
+        }}
+        style={styles.recentCardWrapper}
       >
-        <Image 
-          source={{ uri: recentTrip?.coverImage || 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800' }} 
-          style={styles.recentImage} 
-        />
-        <View style={styles.recentInfo}>
-          <Text style={[styles.recentTitle, { color: theme.colors.onSurface }]} numberOfLines={1}>{recentTrip?.title || texts.recentTripEmpty}</Text>
-          <Text style={styles.recentDate}>
-            {recentTrip ? `${recentTrip.startDate} - ${recentTrip.endDate}` : texts.recentTripHint}
-          </Text>
-          <Text style={styles.recentMeta}>
-            {recentTrip ? `${getTripDays(recentTrip.startDate, recentTrip.endDate)} ${commonTexts.days} • ${((recentTrip.totalDistance || 0) * (settings.distanceUnit === 'Miles' ? 0.621371 : 1)).toFixed(settings.distanceUnit === 'Miles' ? 1 : 0)} ${totalDistanceUnit}` : ''}
-          </Text>
+        <View style={[styles.recentCard, { backgroundColor: theme.colors.surface }]}>
+          <Image
+            source={{ uri: recentTrip?.coverImage || 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=800' }}
+            style={styles.recentImage}
+          />
+          <View style={styles.recentInfo}>
+            <Text style={[styles.recentTitle, { color: theme.colors.onSurface }]} numberOfLines={1}>
+              {recentTrip?.title || texts.recentTripEmpty}
+            </Text>
+            <Text style={styles.recentDate}>
+              {recentTrip ? `${recentTrip.startDate} - ${recentTrip.endDate}` : texts.recentTripHint}
+            </Text>
+            <Text style={styles.recentMeta}>
+              {recentTrip ? `${getTripDays(recentTrip.startDate, recentTrip.endDate)} ${commonTexts.days} • ${formatDistance(recentTrip.totalDistance)}` : texts.recentTripHint}
+            </Text>
+            <View style={styles.recentTags}>
+              {recentTrip && (
+                <View style={styles.tagBadge}>
+                  <Text style={styles.tagText}>{formatDistance(recentTrip.totalDistance)}</Text>
+                </View>
+              )}
+              {recentTrip && recentTrip.status && (
+                <View style={[styles.tagBadge, { backgroundColor: '#E0E7FF' }]}>
+                  <Text style={[styles.tagText, { color: '#4F46E5' }]}>{getStatusLabel(recentTrip.status)}</Text>
+                </View>
+              )}
+            </View>
+          </View>
         </View>
-        <ChevronRight color="#94A3B8" size={24} />
       </TouchableOpacity>
 
       <View style={styles.sectionHeader}>
         <Text variant="titleMedium" style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>{texts.suggestions}</Text>
       </View>
 
-      <TouchableOpacity activeOpacity={0.8} style={styles.aiCard} onPress={() => navigation.navigate('AIPlanner')}>
-        <View style={styles.aiIconBox}>
-          <Sparkles color="#8B5CF6" size={28} />
-        </View>
-        <View style={styles.aiInfo}>
-          <Text style={[styles.aiTitle, { color: theme.colors.onSurface }]}>{texts.aiPlannerTitle}</Text>
-          <Text style={[styles.aiDesc, { color: theme.colors.secondary }]}>{texts.aiPlannerDesc}</Text>
-        </View>
-        <ChevronRight color="#94A3B8" size={24} />
+      <TouchableOpacity activeOpacity={0.9} onPress={() => navigation.navigate('AIPlanner')}>
+        <LinearGradient
+          colors={['#8B5CF6', '#6D28D9']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.aiCard}
+        >
+          <View style={styles.aiIconBox}>
+            <Sparkles color="#8B5CF6" size={24} />
+          </View>
+          <View style={styles.aiInfo}>
+            <Text style={styles.aiTitle}>{texts.aiPlannerTitle}</Text>
+            <Text style={styles.aiDesc}>{texts.aiPlannerDesc}</Text>
+          </View>
+          <View style={styles.aiArrow}>
+            <ChevronRight color="#FFFFFF" size={20} />
+          </View>
+        </LinearGradient>
       </TouchableOpacity>
 
     </ScrollView>
@@ -169,19 +240,28 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 24,
-    marginBottom: 24,
+    marginBottom: 28,
   },
   headerText: {
     flex: 1,
     paddingRight: 16,
   },
   greeting: {
-    fontWeight: 'bold',
-    color: '#0F172A',
-    marginBottom: 4,
+    fontWeight: '800',
+    fontSize: 26,
+    letterSpacing: -0.5,
+    marginBottom: 6,
   },
   subtitle: {
-    color: '#64748B',
+    fontSize: 15,
+    opacity: 0.8,
+  },
+  avatarShadow: {
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
   },
   statsGrid: {
     paddingHorizontal: 24,
@@ -193,108 +273,148 @@ const styles = StyleSheet.create({
   },
   statBox: {
     flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-    alignItems: 'center',
+    borderRadius: 24,
+    padding: 20,
     justifyContent: 'center',
+    borderCurve: 'continuous', // iOS only, gracefully degrades
+  },
+  statIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
   },
   statNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 26,
+    fontWeight: '800',
     marginBottom: 4,
+    letterSpacing: -0.5,
   },
   statLabel: {
-    fontSize: 13,
+    fontSize: 14,
     color: '#64748B',
+    fontWeight: '500',
   },
   sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 24,
     marginBottom: 16,
   },
   sectionTitle: {
-    fontWeight: 'bold',
-    color: '#0F172A',
+    fontWeight: '700',
+    fontSize: 20,
+    letterSpacing: -0.5,
+  },
+  seeAllText: {
+    color: '#4F46E5',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  recentCardWrapper: {
+    marginHorizontal: 24,
+    marginBottom: 32,
+    borderRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
   },
   recentCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    marginHorizontal: 24,
-    padding: 12,
-    borderRadius: 16,
-    marginBottom: 32,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    flexDirection: 'column',
+    borderRadius: 24,
+    overflow: 'hidden',
+    borderCurve: 'continuous',
   },
   recentImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 12,
+    width: '100%',
+    height: 140,
   },
   recentInfo: {
-    flex: 1,
-    marginLeft: 16,
-    justifyContent: 'center',
+    padding: 20,
   },
   recentTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#0F172A',
-    marginBottom: 4,
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 6,
+    letterSpacing: -0.3,
   },
   recentDate: {
-    fontSize: 13,
+    fontSize: 14,
     color: '#64748B',
-    marginBottom: 6,
+    marginBottom: 12,
   },
   recentMeta: {
     fontSize: 13,
-    color: '#64748B',
+    color: '#94A3B8',
+    marginBottom: 12,
     fontWeight: '500',
+  },
+  recentTags: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  tagBadge: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  tagText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#475569',
   },
   aiCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
     marginHorizontal: 24,
-    padding: 16,
-    borderRadius: 16,
-    marginBottom: 32,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    padding: 20,
+    borderRadius: 24,
+    marginBottom: 40,
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 8,
+    borderCurve: 'continuous',
   },
   aiIconBox: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#F3E8FF',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
   },
   aiInfo: {
     flex: 1,
     marginLeft: 16,
+    marginRight: 16,
   },
   aiTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#0F172A',
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
     marginBottom: 4,
+    letterSpacing: -0.3,
   },
   aiDesc: {
-    fontSize: 13,
-    color: '#64748B',
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+    lineHeight: 20,
+  },
+  aiArrow: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
   }
 });

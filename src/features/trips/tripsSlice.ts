@@ -5,10 +5,16 @@ export interface TripActivity {
   time: string;
   description: string;
   location: string;
+  latitude?: number;
+  longitude?: number;
+  estimatedCost?: number;
 }
 
 export interface TripDay {
   day: number;
+  date?: string;
+  theme?: string;
+  estimatedCost?: number;
   activities: TripActivity[];
 }
 
@@ -46,6 +52,30 @@ const initialState: TripsState = {
   error: null,
 };
 
+const toDateOnlyValue = (value?: string) => {
+  if (!value) return '';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  const year = parsed.getFullYear();
+  const month = `${parsed.getMonth() + 1}`.padStart(2, '0');
+  const day = `${parsed.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getTripStatus = (startDate?: string, endDate?: string, fallbackStatus?: string) => {
+  const today = toDateOnlyValue(new Date().toISOString());
+  const start = toDateOnlyValue(startDate);
+  const end = toDateOnlyValue(endDate);
+
+  if (start && end) {
+    if (today >= end) return 'Completed';
+    if (today >= start) return 'Ongoing';
+    return 'Upcoming';
+  }
+
+  return fallbackStatus || 'Upcoming';
+};
+
 // Async thunk để lấy dữ liệu từ Supabase
 export const fetchTrips = createAsyncThunk('trips/fetchTrips', async (userId: string | undefined, { rejectWithValue }) => {
   try {
@@ -64,15 +94,16 @@ export const fetchTrips = createAsyncThunk('trips/fetchTrips', async (userId: st
       startDate: item.start_date,
       endDate: item.end_date,
       budget: item.budget,
-      totalDistance: item.trip_locations ? item.trip_locations.reduce((sum: number, loc: any) => sum + (loc.distance_from_previous || 0), 0) : 0,
+      totalDistance: (item.trip_locations ? item.trip_locations.reduce((sum: number, loc: any) => sum + (loc.distance_from_previous || 0), 0) : 0) || item.total_distance || 0,
       totalLocations: item.trip_locations ? item.trip_locations.length : 0,
       totalCost: item.total_cost,
-      status: item.status,
+      status: getTripStatus(item.start_date, item.end_date, item.status),
       coverImage: item.cover_image,
       tags: item.tags || [],
       latitude: item.latitude,
       longitude: item.longitude,
       address: item.address,
+      itinerary: Array.isArray(item.itinerary) ? item.itinerary : [],
       createdAt: item.created_at,
     }));
     return trips;
