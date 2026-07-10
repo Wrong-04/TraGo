@@ -1,24 +1,32 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { supabase } from '../../config/supabase';
 
-export interface Location {
+export interface TripLocation {
   id: string;
-  tripId: string;
+  trip_id: string;
   name: string;
   latitude: number;
   longitude: number;
   address?: string;
-  placeName?: string;
-  visitDate: string;
-  distanceFromPrevious?: number;
-  travelTimeMinutes?: number;
-  rating?: number;
+  visit_date: string;
   review?: string;
-  orderIndex: number;
+  rating?: number;
+  distance_from_previous?: number;
+  travel_time_minutes?: number;
+  image?: string;
+  status?: string;
+  category?: string;
+  is_favorite?: boolean;
+  mood?: string;
+  weather?: string;
+  visit_time?: string;
+  estimated_cost?: number;
+  order_index?: number;
+  created_at?: string;
 }
 
 interface MapState {
-  locations: Location[];
+  locations: TripLocation[];
   isLoading: boolean;
   error: string | null;
 }
@@ -36,29 +44,16 @@ export const fetchLocations = createAsyncThunk(
       let query = supabase
         .from('trip_locations')
         .select('*')
-        .order('order_index', { ascending: true });
+        .order('visit_date', { ascending: true })
+        .order('visit_time', { ascending: true })
+        .order('created_at', { ascending: true });
 
       if (tripId) query = query.eq('trip_id', tripId);
 
       const { data, error } = await query;
       if (error) throw error;
 
-      const locationsList = data.map(doc => ({
-        id: doc.id,
-        tripId: doc.trip_id || '',
-        name: doc.name || 'Địa điểm',
-        latitude: doc.latitude || 0,
-        longitude: doc.longitude || 0,
-        address: doc.address,
-        placeName: doc.place_name,
-        visitDate: doc.visit_date || '',
-        distanceFromPrevious: doc.distance_from_previous || 0,
-        travelTimeMinutes: doc.travel_time_minutes || 0,
-        rating: doc.rating,
-        review: doc.review,
-        orderIndex: doc.order_index || 0,
-      })) as Location[];
-      return locationsList;
+      return (data || []) as TripLocation[];
     } catch (error: any) {
       return rejectWithValue(error.message);
     }

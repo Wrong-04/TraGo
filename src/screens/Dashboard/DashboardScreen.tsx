@@ -161,47 +161,69 @@ export default function DashboardScreen({ navigation }: any) {
         )}
       </View>
 
-      <TouchableOpacity
-        activeOpacity={0.9}
-        onPress={() => {
-          if (recentTrip) {
-            navigation.navigate('TripDetail', { trip: recentTrip });
-          } else {
-            navigation.navigate('AddTrip'); // Suggest creating a trip
-          }
-        }}
-        style={styles.recentCardWrapper}
+      <ScrollView 
+        horizontal 
+        showsHorizontalScrollIndicator={false}
+        snapToInterval={width * 0.85 + 16}
+        decelerationRate="fast"
+        contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 32, gap: 16 }}
       >
-        <View style={[styles.recentCard, { backgroundColor: theme.colors.surface }]}>
-          <Image
-            source={{ uri: recentTrip?.coverImage || 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=800' }}
-            style={styles.recentImage}
-          />
-          <View style={styles.recentInfo}>
-            <Text style={[styles.recentTitle, { color: theme.colors.onSurface }]} numberOfLines={1}>
-              {recentTrip?.title || texts.recentTripEmpty}
-            </Text>
-            <Text style={styles.recentDate}>
-              {recentTrip ? `${recentTrip.startDate} - ${recentTrip.endDate}` : texts.recentTripHint}
-            </Text>
-            <Text style={styles.recentMeta}>
-              {recentTrip ? `${getTripDays(recentTrip.startDate, recentTrip.endDate)} ${commonTexts.days} • ${formatDistance(recentTrip.totalDistance)}` : texts.recentTripHint}
-            </Text>
-            <View style={styles.recentTags}>
-              {recentTrip && (
-                <View style={styles.tagBadge}>
-                  <Text style={styles.tagText}>{formatDistance(recentTrip.totalDistance)}</Text>
-                </View>
-              )}
-              {recentTrip && recentTrip.status && (
-                <View style={[styles.tagBadge, { backgroundColor: '#E0E7FF' }]}>
-                  <Text style={[styles.tagText, { color: '#4F46E5' }]}>{getStatusLabel(recentTrip.status)}</Text>
-                </View>
-              )}
+        {items.length === 0 ? (
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={() => navigation.navigate('AddTrip')}
+            style={[styles.recentCardWrapper, { marginHorizontal: 0, width: width * 0.85 }]}
+          >
+            <View style={[styles.recentCard, { backgroundColor: theme.colors.surface }]}>
+              <Image
+                source={{ uri: 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=800' }}
+                style={styles.recentImage}
+              />
+              <View style={styles.recentInfo}>
+                <Text style={[styles.recentTitle, { color: theme.colors.onSurface }]} numberOfLines={1}>
+                  {texts.recentTripEmpty}
+                </Text>
+                <Text style={styles.recentDate}>{texts.recentTripHint}</Text>
+              </View>
             </View>
-          </View>
-        </View>
-      </TouchableOpacity>
+          </TouchableOpacity>
+        ) : (
+          items.slice(0, 5).map(trip => (
+            <TouchableOpacity
+              key={trip.id}
+              activeOpacity={0.9}
+              onPress={() => navigation.navigate('TripDetail', { trip })}
+              style={[styles.recentCardWrapper, { marginHorizontal: 0, width: width * 0.85 }]}
+            >
+              <View style={[styles.recentCard, { backgroundColor: theme.colors.surface }]}>
+                <Image
+                  source={{ uri: trip.coverImage || 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=800' }}
+                  style={styles.recentImage}
+                />
+                <View style={styles.recentInfo}>
+                  <Text style={[styles.recentTitle, { color: theme.colors.onSurface }]} numberOfLines={1}>
+                    {trip.title}
+                  </Text>
+                  <Text style={styles.recentDate}>
+                    {trip.startDate} - {trip.endDate}
+                  </Text>
+                  <Text style={styles.recentMeta}>
+                    {getTripDays(trip.startDate, trip.endDate)} {commonTexts.days} • {formatDistance(trip.totalDistance)}
+                  </Text>
+                  <View style={styles.recentTags}>
+                    <View style={styles.tagBadge}>
+                      <Text style={styles.tagText}>{formatDistance(trip.totalDistance)}</Text>
+                    </View>
+                    <View style={[styles.tagBadge, { backgroundColor: '#E0E7FF' }]}>
+                      <Text style={[styles.tagText, { color: '#4F46E5' }]}>{getStatusLabel(trip.status)}</Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+            </TouchableOpacity>
+          ))
+        )}
+      </ScrollView>
 
       <View style={styles.sectionHeader}>
         <Text variant="titleMedium" style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>{texts.suggestions}</Text>

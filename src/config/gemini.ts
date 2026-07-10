@@ -543,3 +543,29 @@ export const generateJournalAdvice = async (city: string, places: string) => {
     return fallback;
   }
 };
+
+export const generateLocationDetails = async (query: string, latitude: number, longitude: number) => {
+  const fallback = {
+    name: query,
+    category: "Khác",
+    review: "Một địa điểm thú vị đáng để khám phá.",
+    wiki_title: ""
+  };
+
+  const prompt = `I am adding a travel location named "${query}". 
+      Return a valid JSON with NO markdown formatting:
+      {
+        "name": "Formatted name",
+        "category": "One of: 🏖 Beach, 🏯 Temple, 🍜 Food, 🌄 Mountain, 🏨 Hotel, 🛍 Shopping, 🎨 Museum, 🌳 Park, or Other",
+        "review": "A short poetic description in Vietnamese",
+        "wiki_title": "The English Wikipedia article title for this exact place (to fetch image). Empty string if not famous."
+      }`;
+
+  try {
+    const text = await generateWithFallback(prompt, JSON.stringify(fallback));
+    return safeParseJson(text, fallback);
+  } catch (error) {
+    console.error('Lỗi khi gọi Gemini AI cho chi tiết địa điểm:', error);
+    return fallback;
+  }
+};
