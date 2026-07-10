@@ -212,10 +212,7 @@ export default function TripsScreen({ navigation }: any) {
         <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()}>
           <ArrowLeft color="#0F172A" size={24} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{texts.title}</Text>
-        <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.navigate('AddTrip')}>
-          <Plus color="#4F46E5" size={24} />
-        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { marginRight: 40 }]}>{texts.title}</Text>
       </View>
 
       {/* Search Bar */}

@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, ImageBackground, Dimensions, ActivityIndicator, TouchableOpacity, Image, Alert } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { View, StyleSheet, ScrollView, Animated, Dimensions, ActivityIndicator, TouchableOpacity, Image, Alert } from 'react-native';
 
 import { Text, useTheme, IconButton, Button, Portal, Modal, TextInput as PaperTextInput } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -151,7 +151,6 @@ export default function TripDetailScreen({ navigation, route }: any) {
   const [newItemCost, setNewItemCost] = useState('');
   const [savingItinerary, setSavingItinerary] = useState(false);
 
-  // Add Expense State
   const [expenseModalVisible, setExpenseModalVisible] = useState(false);
   const [expenseAmount, setExpenseAmount] = useState('');
   const [expenseCategory, setExpenseCategory] = useState('');
@@ -177,12 +176,28 @@ export default function TripDetailScreen({ navigation, route }: any) {
       setExpenseModalVisible(false);
       setExpenseAmount('');
       setExpenseCategory('');
-      dispatch(fetchTripDetailData(trip.id)); // Reload data
+      dispatch(fetchTripDetailData(trip.id));
     } catch (e: any) {
       console.log('Error adding expense:', e);
     } finally {
       setAddingExpense(false);
     }
+  };
+
+  const handleDeleteExpense = async (expenseId: string) => {
+    Alert.alert('Xóa khoản chi', 'Bạn có chắc chắn muốn xóa khoản chi này?', [
+      { text: 'Hủy', style: 'cancel' },
+      { text: 'Xóa', style: 'destructive', onPress: async () => {
+          try {
+            const { error } = await supabase.from('trip_expenses').delete().eq('id', expenseId);
+            if (error) throw error;
+            dispatch(fetchTripDetailData(trip.id));
+          } catch (e) {
+            console.log('Error deleting expense:', e);
+          }
+        }
+      }
+    ]);
   };
 
   const handleExpenseAdvisor = async () => {
@@ -195,13 +210,11 @@ export default function TripDetailScreen({ navigation, route }: any) {
   const handleWeatherAdvisor = async () => {
     setLoadingWeatherAI(true);
     try {
-      // Fetch coordinates
       const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${trip.city || 'Hanoi'}&count=1`);
       const geoData = await geoRes.json();
       if (!geoData.results || geoData.results.length === 0) throw new Error('Location not found');
       const { latitude, longitude } = geoData.results[0];
       
-      // Fetch weather
       const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`);
       const weatherData = await weatherRes.json();
 
@@ -238,6 +251,96 @@ export default function TripDetailScreen({ navigation, route }: any) {
     } finally {
       setLoadingJournalAI(false);
     }
+  };
+
+  const [journalModalVisible, setJournalModalVisible] = useState(false);
+  const [journalContent, setJournalContent] = useState('');
+  const [addingJournal, setAddingJournal] = useState(false);
+
+  const handleAddJournal = async () => {
+    if (!journalContent.trim()) return;
+    setAddingJournal(true);
+    try {
+      const newJournal = {
+        trip_id: trip.id,
+        content: journalContent.trim(),
+        title: `Nhật ký ngày ${new Date().toLocaleDateString('vi-VN')}`,
+      };
+      const { error } = await supabase.from('journals').insert([newJournal]);
+      if (error) throw error;
+      setJournalModalVisible(false);
+      setJournalContent('');
+      dispatch(fetchTripDetailData(trip.id));
+    } catch (e) {
+      console.log('Error adding journal:', e);
+    } finally {
+      setAddingJournal(false);
+    }
+  };
+
+  const handleDeleteJournal = async (journalId: string) => {
+    Alert.alert('Xóa nhật ký', 'Bạn có chắc chắn muốn xóa mục nhật ký này?', [
+      { text: 'Hủy', style: 'cancel' },
+      { text: 'Xóa', style: 'destructive', onPress: async () => {
+          try {
+            const { error } = await supabase.from('journals').delete().eq('id', journalId);
+            if (error) throw error;
+            dispatch(fetchTripDetailData(trip.id));
+          } catch (e) {
+            console.log('Error deleting journal:', e);
+          }
+        }
+      }
+    ]);
+  };
+
+  const getDistanceFromLatLonInKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+  };
+
+  const handleDeleteLocation = async (locationId: string) => {
+    Alert.alert('Xóa địa điểm', 'Bạn có chắc chắn muốn xóa địa điểm này khỏi hành trình?', [
+      { text: 'Hủy', style: 'cancel' },
+      { text: 'Xóa', style: 'destructive', onPress: async () => {
+          try {
+            const { error } = await supabase.from('trip_locations').delete().eq('id', locationId);
+            if (error) throw error;
+            
+            const remainingLocations = locations.filter(loc => loc.id !== locationId).sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
+            
+            for (let i = 0; i < remainingLocations.length; i++) {
+              const loc = remainingLocations[i];
+              let newDist = null;
+              let newTime = loc.travel_time_minutes;
+              
+              if (i === 0) {
+                newDist = null;
+                newTime = null;
+              } else {
+                const prevLoc = remainingLocations[i - 1];
+                if (loc.latitude && loc.longitude && prevLoc.latitude && prevLoc.longitude) {
+                  newDist = getDistanceFromLatLonInKm(prevLoc.latitude, prevLoc.longitude, loc.latitude, loc.longitude);
+                }
+              }
+
+              await supabase.from('trip_locations').update({
+                order_index: i,
+                distance_from_previous: newDist,
+                travel_time_minutes: newTime
+              }).eq('id', loc.id);
+            }
+
+            dispatch(fetchTripDetailData(trip.id));
+          } catch (e) {
+            console.log('Error deleting location:', e);
+          }
+        }
+      }
+    ]);
   };
 
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -364,7 +467,6 @@ export default function TripDetailScreen({ navigation, route }: any) {
     ]);
   };
   
-  // --- Trip progress calculation ---
   const today = new Date();
   const tripStart = new Date(trip.startDate);
   const tripEnd = new Date(trip.endDate);
@@ -372,13 +474,25 @@ export default function TripDetailScreen({ navigation, route }: any) {
   const daysPassed = Math.max(0, Math.ceil((today.getTime() - tripStart.getTime()) / 86400000));
   const progressPct = Math.min(100, Math.round((daysPassed / totalDays) * 100));
 
-  // These need to be computed before useMemo that references them
   const hasItinerary = Array.isArray(itineraryData) && itineraryData.length > 0;
   const hasLocations = locations.length > 0;
   const hasExpenses = expenses.length > 0;
   const hasJournals = journals.length > 0;
+  
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const HEADER_HEIGHT = 360;
+  const imageTranslateY = scrollY.interpolate({
+    inputRange: [-100, 0, HEADER_HEIGHT],
+    outputRange: [-50, 0, HEADER_HEIGHT * 0.5],
+    extrapolate: 'clamp',
+  });
+  const imageScale = scrollY.interpolate({
+    inputRange: [-100, 0],
+    outputRange: [1.5, 1],
+    extrapolateLeft: 'extend',
+    extrapolateRight: 'clamp',
+  });
 
-  // Mini-map data: combine AI itinerary coords + DB locations
   const miniMapCoords = React.useMemo(() => {
     const coords: {latitude: number; longitude: number; name: string}[] = [];
     if (hasItinerary) {
@@ -415,11 +529,14 @@ export default function TripDetailScreen({ navigation, route }: any) {
   if (!trip) return null;
 
   const totalExpenses = expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
-  const totalCost = totalExpenses > 0 ? totalExpenses : (trip.totalCost || trip.budget || 0);
-  const formattedCost = new Intl.NumberFormat(settings.language === 'vi' ? 'vi-VN' : 'en-US', {
+  const estimatedBudget = trip.totalCost || trip.budget || 0;
+  
+  const formatter = new Intl.NumberFormat(settings.language === 'vi' ? 'vi-VN' : 'en-US', {
     style: 'currency',
     currency: 'VND',
-  }).format(totalCost);
+  });
+  const formattedBudget = formatter.format(estimatedBudget);
+  const formattedExpenses = formatter.format(totalExpenses);
   const distanceValue = (trip.totalDistance || 0) * (settings.distanceUnit === 'Miles' ? 0.621371 : 1);
   const distanceUnit = settings.distanceUnit === 'Miles' ? translations[settings.language].common.miles : translations[settings.language].common.kilometers;
   const aiDestinations = itineraryData.flatMap((day: TripDay) => (day.activities ?? []).map((activity: TripActivity) => activity.location || activity.description).filter(Boolean));
@@ -427,7 +544,6 @@ export default function TripDetailScreen({ navigation, route }: any) {
   const destinationText = uniqueDestinations.length > 0
     ? uniqueDestinations.join(', ')
     : locations.map(loc => loc.name).filter(Boolean).join(', ');
-  // hasItinerary, hasLocations, hasExpenses, hasJournals are declared above
 
   const renderTab = (key: typeof activeTab, label: string, IconComponent: any) => {
     const isActive = activeTab === key;
@@ -459,9 +575,16 @@ export default function TripDetailScreen({ navigation, route }: any) {
 
   return (
     <View style={[styles.container, { backgroundColor: '#F8FAFC' }]}>
-      <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
-        {/* Cover Image Header */}
-        <ImageBackground source={{ uri: trip.coverImage || 'https://images.unsplash.com/photo-1559592413-7cec4d0cae2b?w=800' }} style={styles.headerImage}>
+      <Animated.Image 
+        source={{ uri: trip.coverImage || 'https://images.unsplash.com/photo-1559592413-7cec4d0cae2b?w=800' }} 
+        style={[styles.headerImage, { position: 'absolute', top: 0, left: 0, right: 0, transform: [{ translateY: imageTranslateY }, { scale: imageScale }] }]} 
+      />
+      <Animated.ScrollView 
+        showsVerticalScrollIndicator={false} 
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
+        scrollEventThrottle={16}
+      >
+        <View style={{ height: HEADER_HEIGHT }}>
           <LinearGradient
             colors={['rgba(0,0,0,0.5)', 'transparent', 'rgba(0,0,0,0.8)']}
             style={styles.headerOverlay}
@@ -494,10 +617,9 @@ export default function TripDetailScreen({ navigation, route }: any) {
               </View>
             </View>
           </LinearGradient>
-        </ImageBackground>
+        </View>
 
         <View style={styles.content}>
-          {/* Stats Grid */}
           <View style={styles.statsGrid}>
             <View style={styles.statBox}>
               <Text style={styles.statValue}>{distanceValue.toFixed(settings.distanceUnit === 'Miles' ? 1 : 0)}</Text>
@@ -515,7 +637,6 @@ export default function TripDetailScreen({ navigation, route }: any) {
             </View>
           </View>
 
-          {/* Progress Bar */}
           <View style={styles.progressCard}>
             <View style={styles.progressHeader}>
               <Text style={styles.progressTitle}>Tiến độ chuyến đi</Text>
@@ -536,12 +657,20 @@ export default function TripDetailScreen({ navigation, route }: any) {
               <DollarSign color="#10B981" size={24} />
             </View>
             <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text style={styles.costTitle}>Tổng chi phí dự kiến</Text>
-              <Text style={styles.costValue}>{formattedCost}</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={styles.costTitle}>Ngân sách / Dự kiến</Text>
+                <Text style={[styles.costValue, { fontSize: 15 }]}>{formattedBudget}</Text>
+              </View>
+              <View style={{ height: 6, backgroundColor: '#E2E8F0', borderRadius: 3, marginVertical: 8 }}>
+                <View style={{ height: '100%', width: `${Math.min((totalExpenses / (estimatedBudget || 1)) * 100, 100)}%`, backgroundColor: totalExpenses > estimatedBudget ? '#EF4444' : '#10B981', borderRadius: 3 }} />
+              </View>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={styles.costTitle}>Thực tế đã chi</Text>
+                <Text style={[styles.costValue, { fontSize: 15, color: totalExpenses > estimatedBudget ? '#EF4444' : '#10B981' }]}>{formattedExpenses}</Text>
+              </View>
             </View>
           </View>
 
-          {/* Tab Selector */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabContainer}>
             {renderTab('itinerary', texts.itinerary, Navigation)}
             {renderTab('expenses', texts.expenses, DollarSign)}
@@ -689,9 +818,26 @@ export default function TripDetailScreen({ navigation, route }: any) {
                           </View>
                           {index < locations.length - 1 && <View style={styles.timelineLine} />}
                           <View style={styles.timelineCard}>
-                            <Text style={styles.timelineDate}>{loc.visit_date || `Điểm ${index + 1}`}</Text>
-                            <Text style={styles.timelineName}>{loc.name}</Text>
-                            {loc.address ? <Text style={styles.timelineAddress}>{loc.address}</Text> : null}
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.timelineDate}>{loc.visit_date || `Điểm ${index + 1}`}</Text>
+                                <Text style={styles.timelineName}>{loc.name}</Text>
+                                {loc.address ? <Text style={styles.timelineAddress}>{loc.address}</Text> : null}
+                              </View>
+                              <TouchableOpacity onPress={() => handleDeleteLocation(loc.id)} style={{ padding: 4, marginLeft: 8 }}>
+                                <Trash2 color="#EF4444" size={16} />
+                              </TouchableOpacity>
+                            </View>
+                            {(loc.distance_from_previous || loc.travel_time_minutes) ? (
+                              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 12 }}>
+                                {loc.distance_from_previous ? (
+                                  <Text style={{ fontSize: 12, color: '#64748B', fontWeight: '500' }}>🚗 {(loc.distance_from_previous * (settings.distanceUnit === 'Miles' ? 0.621371 : 1)).toFixed(1)} {distanceUnit}</Text>
+                                ) : null}
+                                {loc.travel_time_minutes ? (
+                                  <Text style={{ fontSize: 12, color: '#64748B', fontWeight: '500' }}>⏳ {Math.round(loc.travel_time_minutes)} phút</Text>
+                                ) : null}
+                              </View>
+                            ) : null}
                           </View>
                         </View>
                       ))
@@ -738,6 +884,9 @@ export default function TripDetailScreen({ navigation, route }: any) {
                         <Text style={styles.expenseAmount}>{new Intl.NumberFormat(settings.language === 'vi' ? 'vi-VN' : 'en-US', {
                           style: 'currency', currency: 'VND'
                         }).format(exp.amount || 0)}</Text>
+                        <TouchableOpacity style={{ marginLeft: 12, padding: 4 }} onPress={() => handleDeleteExpense(exp.id)}>
+                          <Trash2 color="#EF4444" size={18} />
+                        </TouchableOpacity>
                       </View>
                     ))
                   ) : (
@@ -750,20 +899,30 @@ export default function TripDetailScreen({ navigation, route }: any) {
 
               {activeTab === 'journal' && (
                 <View style={styles.journalSection}>
-                  {/* ─── Journal entries section ─── */}
                   <View style={styles.journalSectionHeader}>
                     <Text style={styles.journalSectionTitle}>📓 Nhật ký chuyến đi</Text>
-                    <TouchableOpacity style={styles.journalAddBtn} onPress={handleJournalAdvisor} activeOpacity={0.8}>
-                      {loadingJournalAI ? <ActivityIndicator size={14} color="#8B5CF6" /> : <Sparkles color="#8B5CF6" size={14} />}
-                      <Text style={styles.journalAddBtnText}>{loadingJournalAI ? 'Đang viết...' : 'AI viết nhật ký'}</Text>
-                    </TouchableOpacity>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <TouchableOpacity style={[styles.journalAddBtn, { backgroundColor: '#F3F4F6' }]} onPress={() => setJournalModalVisible(true)} activeOpacity={0.8}>
+                        <Plus color="#4F46E5" size={14} />
+                        <Text style={[styles.journalAddBtnText, { color: '#4F46E5' }]}>Viết tay</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.journalAddBtn} onPress={handleJournalAdvisor} activeOpacity={0.8}>
+                        {loadingJournalAI ? <ActivityIndicator size={14} color="#8B5CF6" /> : <Sparkles color="#8B5CF6" size={14} />}
+                        <Text style={styles.journalAddBtnText}>{loadingJournalAI ? 'Đang viết...' : 'AI viết nhật ký'}</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                   {hasJournals ? (
                     journals.map(journal => (
                       <View key={journal.id} style={styles.journalCard}>
                         <View style={styles.journalHeader}>
-                          <Clock color="#94A3B8" size={14} />
-                          <Text style={styles.journalDate}>{new Date(journal.created_at).toLocaleDateString(settings.language === 'vi' ? 'vi-VN' : 'en-US')}</Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <Clock color="#94A3B8" size={14} />
+                            <Text style={styles.journalDate}>{new Date(journal.created_at).toLocaleDateString(settings.language === 'vi' ? 'vi-VN' : 'en-US')}</Text>
+                          </View>
+                          <TouchableOpacity onPress={() => handleDeleteJournal(journal.id)} style={{ padding: 4 }}>
+                            <Trash2 color="#EF4444" size={16} />
+                          </TouchableOpacity>
                         </View>
                         <Text style={styles.journalText}>{journal.content || 'Không có nội dung'}</Text>
                       </View>
@@ -774,7 +933,6 @@ export default function TripDetailScreen({ navigation, route }: any) {
                     </View>
                   )}
 
-                  {/* ─── Trip photos section ─── */}
                   <View style={[styles.journalSectionHeader, { marginTop: 24 }]}>
                     <Text style={styles.journalSectionTitle}>🖼 Ảnh chuyến đi</Text>
                     <TouchableOpacity 
@@ -834,7 +992,7 @@ export default function TripDetailScreen({ navigation, route }: any) {
           </TouchableOpacity>
 
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
 
       <Portal>
         <Modal
@@ -859,7 +1017,11 @@ export default function TripDetailScreen({ navigation, route }: any) {
             mode="outlined"
             label="Số tiền (VND)"
             value={expenseAmount}
-            onChangeText={setExpenseAmount}
+            onChangeText={(text) => {
+              const numericValue = text.replace(/[^0-9]/g, '');
+              const formattedValue = numericValue.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+              setExpenseAmount(formattedValue);
+            }}
             keyboardType="numeric"
             style={styles.expenseInput}
             outlineColor="#E2E8F0"
@@ -871,6 +1033,32 @@ export default function TripDetailScreen({ navigation, route }: any) {
           <View style={styles.expenseModalActions}>
             <Button mode="text" onPress={() => setExpenseModalVisible(false)} textColor="#64748B" style={{ flex: 1 }}>Hủy</Button>
             <Button mode="contained" onPress={handleAddExpense} loading={addingExpense} disabled={addingExpense} buttonColor="#10B981" style={{ flex: 1, borderRadius: 12 }}>Lưu</Button>
+          </View>
+        </Modal>
+      </Portal>
+
+      <Portal>
+        <Modal
+          visible={journalModalVisible}
+          onDismiss={() => setJournalModalVisible(false)}
+          contentContainerStyle={styles.expenseModal}
+        >
+          <Text style={styles.expenseModalTitle}>Viết nhật ký</Text>
+          <PaperTextInput
+            mode="outlined"
+            label="Cảm nghĩ, kỷ niệm về chuyến đi..."
+            value={journalContent}
+            onChangeText={setJournalContent}
+            style={[styles.expenseInput, { height: 120 }]}
+            multiline
+            numberOfLines={4}
+            outlineColor="#E2E8F0"
+            activeOutlineColor="#8B5CF6"
+            theme={{ roundness: 12, colors: { background: '#F8FAFC' } }}
+          />
+          <View style={styles.expenseModalActions}>
+            <Button mode="text" onPress={() => setJournalModalVisible(false)} textColor="#64748B" style={{ flex: 1 }}>Hủy</Button>
+            <Button mode="contained" onPress={handleAddJournal} loading={addingJournal} disabled={addingJournal} buttonColor="#8B5CF6" style={{ flex: 1, borderRadius: 12 }}>Lưu</Button>
           </View>
         </Modal>
       </Portal>

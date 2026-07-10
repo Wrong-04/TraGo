@@ -30,14 +30,10 @@ export default function GalleryScreen({ navigation }: any) {
   const user = useSelector((state: RootState) => state.auth.user);
   const { images, isLoading } = useSelector((state: RootState) => state.gallery);
 
-  const [activeTab, setActiveTab] = useState<'all' | 'trip' | 'date'>('all');
-  const [searchQuery, setSearchQuery] = useState('');
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [msg, setMsg] = useState('');
   const [fabModalVisible, setFabModalVisible] = useState(false);
-  const [selectedTrip, setSelectedTrip] = useState<string | null>(null);
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [uploadTripId, setUploadTripId] = useState<string | null>(null);
   const [assignTripId, setAssignTripId] = useState<string | null>(null);
   const [assignModalVisible, setAssignModalVisible] = useState(false);
@@ -76,15 +72,6 @@ export default function GalleryScreen({ navigation }: any) {
     }, {} as Record<string, string>);
   }, [trips]);
 
-  const dateChips = useMemo(() => {
-    return Array.from(
-      new Set(
-        images
-          .map((img: any) => (img.createdAt ? new Date(img.createdAt).toISOString().split('T')[0] : null))
-          .filter(Boolean) as string[]
-      )
-    ).sort((a, b) => (a > b ? -1 : 1));
-  }, [images]);
 
   const handleUpload = async (asset: any, tripIdForUpload: string | null) => {
     if (!user) {
@@ -250,29 +237,42 @@ export default function GalleryScreen({ navigation }: any) {
     }
   };
 
-  const filteredImages = useMemo(() => {
-    return images.filter((img: any) => {
-      if (activeTab === 'trip' && selectedTrip && img.tripId !== selectedTrip) {
-        return false;
-      }
+  const groupedImages = useMemo(() => {
+    const groups: Record<string, any[]> = {};
+    const otherImages: any[] = [];
 
-      if (activeTab === 'date' && selectedDate) {
-        const imgDate = img.createdAt ? new Date(img.createdAt).toISOString().split('T')[0] : '';
-        if (imgDate !== selectedDate) return false;
+    images.forEach((img: any) => {
+      if (img.tripId) {
+        if (!groups[img.tripId]) groups[img.tripId] = [];
+        groups[img.tripId].push(img);
+      } else {
+        otherImages.push(img);
       }
-
-      if (!searchQuery) return true;
-      const q = searchQuery.toLowerCase();
-      const tripTitle = img.tripId ? tripNameById[img.tripId] || '' : '';
-      return (
-        tripTitle.toLowerCase().includes(q) ||
-        (img.title || '').toLowerCase().includes(q)
-      );
     });
-  }, [images, activeTab, searchQuery, selectedTrip, selectedDate, tripNameById]);
 
-  const leftColumn = filteredImages.filter((_, i) => i % 2 === 0);
-  const rightColumn = filteredImages.filter((_, i) => i % 2 !== 0);
+    const result = [];
+    for (const trip of trips) {
+      if (groups[trip.id] && groups[trip.id].length > 0) {
+        result.push({
+          id: trip.id,
+          title: `📍 ${trip.title}`,
+          data: groups[trip.id]
+        });
+      }
+    }
+    
+    if (otherImages.length > 0) {
+      result.push({
+        id: 'other',
+        title: '📂 Ảnh tự do (Chưa phân loại)',
+        data: otherImages
+      });
+    }
+
+    return result;
+  }, [images, trips]);
+
+
 
   const renderImageCard = (item: any) => {
     const isSelected = selectedImageIds.includes(item.id);
@@ -318,69 +318,8 @@ export default function GalleryScreen({ navigation }: any) {
           <Text style={styles.headerCount}>{images.length} ảnh</Text>
         </View>
 
-        <View style={styles.searchBar}>
-          <Search color="#94A3B8" size={20} />
-          <RNTextInput
-            style={styles.searchInput}
-            placeholder="Tìm theo chuyến đi, ngày..."
-            placeholderTextColor="#94A3B8"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-        </View>
 
-        <View style={styles.tabContainer}>
-          {[
-            { key: 'all', label: 'Tất cả' },
-            { key: 'trip', label: 'Theo chuyến đi' },
-            { key: 'date', label: 'Theo ngày' },
-          ].map(tab => (
-            <TouchableOpacity
-              key={tab.key}
-              onPress={() => {
-                setActiveTab(tab.key as 'all' | 'trip' | 'date');
-                if (tab.key !== 'trip') setSelectedTrip(null);
-                if (tab.key !== 'date') setSelectedDate(null);
-              }}
-              style={[styles.tabBtn, activeTab === tab.key && styles.tabBtnActive]}
-            >
-              <Text style={[styles.tabTxt, activeTab === tab.key && styles.tabTxtActive]}>{tab.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
 
-        {activeTab === 'trip' && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
-            <TouchableOpacity onPress={() => setSelectedTrip(null)} style={[styles.chip, !selectedTrip && styles.chipActive]}>
-              <Text style={[styles.chipTxt, !selectedTrip && styles.chipTxtActive]}>Tất cả</Text>
-            </TouchableOpacity>
-            {trips.map(tripItem => {
-              const count = images.filter((img: any) => img.tripId === tripItem.id).length;
-              return (
-                <TouchableOpacity
-                  key={tripItem.id}
-                  onPress={() => setSelectedTrip(tripItem.id)}
-                  style={[styles.chip, selectedTrip === tripItem.id && styles.chipActive]}
-                >
-                  <Text style={[styles.chipTxt, selectedTrip === tripItem.id && styles.chipTxtActive]}>{tripItem.title} ({count})</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        )}
-
-        {activeTab === 'date' && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
-            <TouchableOpacity onPress={() => setSelectedDate(null)} style={[styles.chip, !selectedDate && styles.chipActive]}>
-              <Text style={[styles.chipTxt, !selectedDate && styles.chipTxtActive]}>Tất cả</Text>
-            </TouchableOpacity>
-            {dateChips.map(date => (
-              <TouchableOpacity key={date} onPress={() => setSelectedDate(date)} style={[styles.chip, selectedDate === date && styles.chipActive]}>
-                <Text style={[styles.chipTxt, selectedDate === date && styles.chipTxtActive]}>{new Date(date).toLocaleDateString('vi-VN')}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        )}
       </View>
 
       {isLoading && images.length === 0 ? (
@@ -398,10 +337,19 @@ export default function GalleryScreen({ navigation }: any) {
         </View>
       ) : (
         <ScrollView style={styles.gridScroll} contentContainerStyle={styles.gridContent} showsVerticalScrollIndicator={false}>
-          <View style={styles.masonryContainer}>
-            <View style={styles.column}>{leftColumn.map(renderImageCard)}</View>
-            <View style={styles.column}>{rightColumn.map(renderImageCard)}</View>
-          </View>
+          {groupedImages.map((group) => {
+            const leftCol = group.data.filter((_, i) => i % 2 === 0);
+            const rightCol = group.data.filter((_, i) => i % 2 !== 0);
+            return (
+              <View key={group.id} style={styles.sectionContainer}>
+                <Text style={styles.sectionTitle}>{group.title}</Text>
+                <View style={styles.masonryContainer}>
+                  <View style={styles.column}>{leftCol.map(renderImageCard)}</View>
+                  <View style={styles.column}>{rightCol.map(renderImageCard)}</View>
+                </View>
+              </View>
+            );
+          })}
         </ScrollView>
       )}
 
@@ -409,7 +357,7 @@ export default function GalleryScreen({ navigation }: any) {
         <TouchableOpacity
           style={[styles.fab, { bottom: insets.bottom + 20 }]}
           onPress={() => {
-            setUploadTripId(activeTab === 'trip' ? selectedTrip : null);
+            setUploadTripId(null);
             setFabModalVisible(true);
           }}
           activeOpacity={0.9}
@@ -543,13 +491,8 @@ const styles = StyleSheet.create({
   headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 16 },
   headerTitle: { fontSize: 28, fontWeight: '800', color: '#0F172A' },
   headerCount: { fontSize: 14, color: '#64748B', fontWeight: '500', marginBottom: 6 },
-  searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F1F5F9', borderRadius: 12, paddingHorizontal: 12, height: 44, marginBottom: 16 },
-  searchInput: { flex: 1, marginLeft: 8, fontSize: 15, color: '#0F172A' },
-  tabContainer: { flexDirection: 'row', backgroundColor: '#F1F5F9', borderRadius: 12, padding: 4 },
-  tabBtn: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 8 },
-  tabBtnActive: { backgroundColor: '#fff', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
-  tabTxt: { fontSize: 13, fontWeight: '600', color: '#64748B' },
-  tabTxtActive: { color: '#0F172A', fontWeight: '700' },
+  sectionContainer: { marginBottom: 32 },
+  sectionTitle: { fontSize: 18, fontWeight: '800', color: '#1E293B', marginBottom: 16, marginLeft: 4 },
   chipScroll: { marginTop: 16 },
   chip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#F1F5F9', marginRight: 8, borderWidth: 1, borderColor: '#E2E8F0' },
   chipActive: { backgroundColor: '#EFF6FF', borderColor: '#3B82F6' },

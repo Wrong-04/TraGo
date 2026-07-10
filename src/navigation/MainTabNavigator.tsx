@@ -13,6 +13,8 @@ import ProfileScreen from '../screens/Profile/ProfileScreen';
 import MapScreen from '../screens/Maps/MapScreen';
 import GalleryScreen from '../screens/Gallery/GalleryScreen';
 
+import { BlurView } from 'expo-blur';
+
 const Tab = createBottomTabNavigator();
 
 export default function MainTabNavigator() {
@@ -27,6 +29,9 @@ export default function MainTabNavigator() {
         tabBarActiveTintColor: '#4F46E5', // Indigo-600
         tabBarInactiveTintColor: '#94A3B8', // Slate-400
         tabBarShowLabel: true,
+        tabBarBackground: () => (
+          <BlurView tint="light" intensity={80} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
+        ),
         tabBarLabelStyle: {
           fontSize: 12,
           fontWeight: '600',
@@ -34,13 +39,11 @@ export default function MainTabNavigator() {
           marginBottom: Platform.OS === 'ios' ? 0 : 8,
         },
         tabBarStyle: {
-          backgroundColor: '#FFFFFF',
+          position: 'absolute',
+          backgroundColor: 'rgba(255, 255, 255, 0.65)',
           borderTopWidth: 0,
-          elevation: 12,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: 0.05,
-          shadowRadius: 12,
+          elevation: 0,
+          shadowColor: 'transparent',
           height: Platform.OS === 'ios' ? 88 : 68,
           paddingTop: 8,
         },

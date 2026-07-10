@@ -27,8 +27,9 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import * as Clipboard from 'expo-clipboard';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { fetchLocations } from '../../features/map/mapSlice';
+import { generateLocationDetails } from '../../config/gemini';
 
 const { width, height } = Dimensions.get('window');
 
@@ -60,8 +61,28 @@ const MOODS = ['😍', '😀', '😊', '😐', '😢'];
 const WEATHERS = ['☀️', '☁️', '🌧', '⛈', '❄️'];
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
-const getMarkerColor = (index: number, total: number, isSelected: boolean) => {
-  if (isSelected) return '#7C3AED';
+const customMapStyle = [
+  {"elementType": "geometry", "stylers": [{"color": "#242f3e"}]},
+  {"elementType": "labels.text.fill", "stylers": [{"color": "#746855"}]},
+  {"elementType": "labels.text.stroke", "stylers": [{"color": "#242f3e"}]},
+  {"featureType": "administrative.locality", "elementType": "labels.text.fill", "stylers": [{"color": "#d59563"}]},
+  {"featureType": "poi", "elementType": "labels.text.fill", "stylers": [{"color": "#d59563"}]},
+  {"featureType": "poi.park", "elementType": "geometry", "stylers": [{"color": "#263c3f"}]},
+  {"featureType": "poi.park", "elementType": "labels.text.fill", "stylers": [{"color": "#6b9a76"}]},
+  {"featureType": "road", "elementType": "geometry", "stylers": [{"color": "#38414e"}]},
+  {"featureType": "road", "elementType": "geometry.stroke", "stylers": [{"color": "#212a37"}]},
+  {"featureType": "road", "elementType": "labels.text.fill", "stylers": [{"color": "#9ca5b3"}]},
+  {"featureType": "road.highway", "elementType": "geometry", "stylers": [{"color": "#746855"}]},
+  {"featureType": "road.highway", "elementType": "geometry.stroke", "stylers": [{"color": "#1f2835"}]},
+  {"featureType": "road.highway", "elementType": "labels.text.fill", "stylers": [{"color": "#f3d19c"}]},
+  {"featureType": "transit", "elementType": "geometry", "stylers": [{"color": "#2f3948"}]},
+  {"featureType": "transit.station", "elementType": "labels.text.fill", "stylers": [{"color": "#d59563"}]},
+  {"featureType": "water", "elementType": "geometry", "stylers": [{"color": "#17263c"}]},
+  {"featureType": "water", "elementType": "labels.text.fill", "stylers": [{"color": "#515c6d"}]},
+  {"featureType": "water", "elementType": "labels.text.stroke", "stylers": [{"color": "#17263c"}]}
+];
+
+const getMarkerColor = (index: number, total: number) => {
   if (index === 0) return '#10B981';
   if (index === total - 1) return '#EF4444';
   return '#F59E0B';
@@ -72,19 +93,28 @@ const formatDistance = (km: number) => {
   return km >= 1 ? `${km.toFixed(1)} km` : `${(km * 1000).toFixed(0)} m`;
 };
 
+const getDistanceFromLatLonInKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+};
+
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function MapScreen({ route, navigation }: any) {
   const insets = useSafeAreaInsets();
+  const dispatch = useDispatch<AppDispatch>();
   const user = useSelector((state: RootState) => state.auth.user);
+  const locations = useSelector((state: RootState) => state.map.locations);
+  const loading = useSelector((state: RootState) => state.map.isLoading);
   const trip = route.params?.trip;
 
   const mapRef = useRef<MapView>(null);
   const bottomSheetAnim = useRef(new Animated.Value(0)).current;
 
   // ─── State ─────────────────────────────────────────────────────────────────
-  const [locations, setLocations] = useState<TripLocation[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<TripLocation | null>(null);
-  const [loading, setLoading] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const [mapType, setMapType] = useState<'standard' | 'satellite' | 'terrain'>('standard');
   const [snackMsg, setSnackMsg] = useState('');
@@ -123,9 +153,6 @@ export default function MapScreen({ route, navigation }: any) {
   const [formImage, setFormImage] = useState<string | null>(null);
 
   const [formSaving, setFormSaving] = useState(false);
-  const [addingMapMode, setAddingMapMode] = useState(false);
-
-  // Date/Time picker state
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [tempDate, setTempDate] = useState(new Date());
@@ -138,22 +165,15 @@ export default function MapScreen({ route, navigation }: any) {
   const [cancelDialogVisible, setCancelDialogVisible] = useState(false);
 
   // ─── Computed ──────────────────────────────────────────────────────────────
-  const routeCoordinates = locations.map(l => ({ latitude: l.latitude, longitude: l.longitude }));
-  const totalDistance = locations.reduce((s, l) => s + (l.distance_from_previous || 0), 0);
+  const routeCoordinates = React.useMemo(() => locations.map(l => ({ latitude: l.latitude, longitude: l.longitude })), [locations]);
+  const totalDistance = React.useMemo(() => locations.reduce((s, l) => s + (l.distance_from_previous || 0), 0), [locations]);
 
   // ─── Data fetching ─────────────────────────────────────────────────────────
   const loadLocations = useCallback(async () => {
     if (!trip?.id) return;
     try {
-      const { data, error } = await supabase
-        .from('trip_locations')
-        .select('*')
-        .eq('trip_id', trip.id)
-        .order('visit_date', { ascending: true })
-        .order('created_at', { ascending: true });
-      if (error) throw error;
-      const locs = (data || []) as TripLocation[];
-      setLocations(locs);
+      const action: any = await dispatch(fetchLocations(trip.id));
+      const locs = action.payload || [];
 
       if (locs.length > 0) {
         setTimeout(() => {
@@ -186,10 +206,8 @@ export default function MapScreen({ route, navigation }: any) {
       }
     } catch (e) {
       showSnack('Không thể tải dữ liệu địa điểm.', true);
-    } finally {
-      setLoading(false);
     }
-  }, [trip?.id]);
+  }, [trip?.id, dispatch]);
 
   useEffect(() => { 
     // Fetch data immediately
@@ -211,6 +229,15 @@ export default function MapScreen({ route, navigation }: any) {
   const openBottomSheet = (loc: TripLocation) => {
     setSelectedLocation(loc);
     Animated.spring(bottomSheetAnim, { toValue: 1, useNativeDriver: true, bounciness: 8 }).start();
+    setTimeout(() => {
+      mapRef.current?.animateCamera({
+        center: { latitude: loc.latitude, longitude: loc.longitude },
+        altitude: 3000,
+        pitch: 50,
+        heading: 0,
+        zoom: 16
+      }, { duration: 1500 });
+    }, 150);
   };
 
   const closeBottomSheet = () => {
@@ -258,6 +285,12 @@ export default function MapScreen({ route, navigation }: any) {
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
+    
+    if (searchResults.length > 0) {
+       onSelectSuggestion(searchResults[0]);
+       return;
+    }
+
     setSearching(true);
     try {
       const geocode = await Location.geocodeAsync(searchQuery);
@@ -279,6 +312,8 @@ export default function MapScreen({ route, navigation }: any) {
   const confirmPreviewLocation = () => {
     if (!previewLocation) return;
     setSearching(true);
+    setFormAddress(previewLocation.address || '');
+    fetchAddress(previewLocation.latitude, previewLocation.longitude);
     fetchAIDetails(previewLocation.name, { latitude: previewLocation.latitude, longitude: previewLocation.longitude });
     setPreviewLocation(null);
   };
@@ -286,23 +321,7 @@ export default function MapScreen({ route, navigation }: any) {
   const fetchAIDetails = async (query: string, coords: any) => {
     showSnack('AI đang phân tích và tìm ảnh bìa...');
     try {
-      const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
-      if (!apiKey) throw new Error('No API Key');
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-      
-      const prompt = `I am adding a travel location named "${query}". 
-      Return a valid JSON with NO markdown formatting:
-      {
-        "name": "Formatted name",
-        "category": "One of: 🏖 Beach, 🏯 Temple, 🍜 Food, 🌄 Mountain, 🏨 Hotel, 🛍 Shopping, 🎨 Museum, 🌳 Park, or Other",
-        "review": "A short poetic description in Vietnamese",
-        "wiki_title": "The English Wikipedia article title for this exact place (to fetch image). Empty string if not famous."
-      }`;
-      
-      const result = await model.generateContent(prompt);
-      const text = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
-      const data = JSON.parse(text);
+      const data = await generateLocationDetails(query, coords.latitude, coords.longitude);
       
       let imageUrl = '';
       if (data.wiki_title) {
@@ -326,7 +345,7 @@ export default function MapScreen({ route, navigation }: any) {
       setFormLat(coords.latitude.toString());
       setFormLng(coords.longitude.toString());
       
-      setAddingMapMode(false);
+      setEditingLocation(null);
       setEditingLocation(null);
       setFormVisible(true);
       showSnack('AI đã điền xong thông tin!');
@@ -335,7 +354,7 @@ export default function MapScreen({ route, navigation }: any) {
       setFormName(query);
       setFormLat(coords.latitude.toString());
       setFormLng(coords.longitude.toString());
-      setAddingMapMode(false);
+      setEditingLocation(null);
       setEditingLocation(null);
       setFormVisible(true);
       showSnack('Tìm thấy tọa độ, vui lòng tự điền thông tin.');
@@ -543,6 +562,16 @@ export default function MapScreen({ route, navigation }: any) {
         imageUrl = await uploadImageToSupabase(formImage);
       }
 
+      let prevDistance = 0;
+      let orderIdx = locations.length;
+      if (locations.length > 0) {
+        const lastLoc = locations[locations.length - 1];
+        prevDistance = getDistanceFromLatLonInKm(
+          lastLoc.latitude, lastLoc.longitude,
+          parseFloat(formLat), parseFloat(formLng)
+        );
+      }
+
       const payload = {
         trip_id: trip.id,
         name: formName.trim(),
@@ -566,7 +595,12 @@ export default function MapScreen({ route, navigation }: any) {
         if (error) throw error;
         showSnack('Cập nhật địa điểm thành công!');
       } else {
-        const { error } = await supabase.from('trip_locations').insert([payload]);
+        const insertPayload = {
+           ...payload,
+           distance_from_previous: prevDistance,
+           order_index: orderIdx,
+        };
+        const { error } = await supabase.from('trip_locations').insert([insertPayload]);
         if (error) throw error;
         showSnack('Đã thêm địa điểm thành công!');
       }
@@ -615,14 +649,24 @@ export default function MapScreen({ route, navigation }: any) {
     }
   };
 
-  // ─── Map press handler ──────────────────────────────────────────────────────
   const handleMapPress = (e: any) => {
-    if (addingMapMode) {
-      const coord = e.nativeEvent.coordinate;
-      setAddingMapMode(false);
-      openAddForm(coord);
-    } else {
-      if (selectedLocation) closeBottomSheet();
+    if (selectedLocation) closeBottomSheet();
+    if (previewLocation) setPreviewLocation(null); // Dismiss preview marker if tapping elsewhere
+  };
+
+  const handleLongPress = async (e: any) => {
+    const coords = e.nativeEvent.coordinate;
+    setPreviewLocation({ name: 'Vị trí đã chọn', ...coords, address: 'Đang tải địa chỉ...' });
+    
+    // Auto fetch address
+    try {
+      const res = await Location.reverseGeocodeAsync({ latitude: coords.latitude, longitude: coords.longitude });
+      if (res && res.length > 0) {
+        const addr = `${res[0].name ? res[0].name + ', ' : ''}${res[0].street ? res[0].street + ', ' : ''}${res[0].subregion || res[0].city || ''}`;
+        setPreviewLocation({ name: res[0].name || 'Vị trí đã chọn', ...coords, address: addr });
+      }
+    } catch(err) {
+      setPreviewLocation({ name: 'Vị trí đã chọn', ...coords, address: 'Tọa độ: ' + coords.latitude.toFixed(4) + ', ' + coords.longitude.toFixed(4) });
     }
   };
 
@@ -660,9 +704,12 @@ export default function MapScreen({ route, navigation }: any) {
           longitude: locations.length > 0 ? locations[0].longitude : 108.206230,
           latitudeDelta: 0.1, longitudeDelta: 0.1,
         }}
+        customMapStyle={customMapStyle}
         onPress={handleMapPress}
+        onLongPress={handleLongPress}
         showsUserLocation
         showsCompass={false}
+        moveOnMarkerPress={false}
       >
         {locations.map((loc, index) => (
           <Marker
@@ -672,8 +719,8 @@ export default function MapScreen({ route, navigation }: any) {
               e.stopPropagation();
               openBottomSheet(loc);
             }}
-            pinColor={getMarkerColor(index, locations.length, selectedLocation?.id === loc.id)}
-            zIndex={selectedLocation?.id === loc.id ? 999 : index}
+            pinColor={getMarkerColor(index, locations.length)}
+            zIndex={index}
           />
         ))}
 
@@ -682,13 +729,7 @@ export default function MapScreen({ route, navigation }: any) {
         )}
       </MapView>
 
-      {/* ─── Crosshair for picking location ─── */}
-      {addingMapMode && (
-        <View style={styles.crosshairContainer} pointerEvents="none">
-          <Crosshair size={40} color="#EF4444" />
-          <Text style={styles.crosshairText}>Chạm vào bản đồ để thả ghim</Text>
-        </View>
-      )}
+      {/* Removed hintBanner for picking location */}
 
       {/* ─── Header Overlay ─── */}
       <View style={[styles.headerOverlay, { paddingTop: insets.top + 10 }]}>
@@ -748,12 +789,7 @@ export default function MapScreen({ route, navigation }: any) {
         </View>
       )}
 
-      {/* ─── Add Button ─── */}
-      {!addingMapMode && (
-        <TouchableOpacity style={[styles.fab, { bottom: insets.bottom + 20 }]} onPress={() => { setAddingMapMode(true); closeBottomSheet(); }}>
-          <Plus color="#fff" size={24} />
-        </TouchableOpacity>
-      )}
+      {/* Removed FAB Add Button as we now use Long Press */}
 
       {/* ─── Bottom Sheet (Location Details) ─── */}
       <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: bottomSheetTranslate }] }]}>
@@ -1128,8 +1164,9 @@ const styles = StyleSheet.create({
   imagePlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   favToggle: { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', padding: 12, backgroundColor: '#FEF2F2', borderRadius: 100, marginBottom: 16 },
   formDialogActions: { flexDirection: 'row', padding: 16, borderTopWidth: 1, borderTopColor: '#E2E8F0', backgroundColor: '#fff', borderBottomLeftRadius: 16, borderBottomRightRadius: 16 },
-  crosshairContainer: { position: 'absolute', top: '50%', left: '50%', transform: [{ translateX: -20 }, { translateY: -40 }], alignItems: 'center', zIndex: 10 },
-  crosshairText: { position: 'absolute', top: 50, backgroundColor: 'rgba(0,0,0,0.7)', color: '#fff', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, fontSize: 12, overflow: 'hidden', width: 200, textAlign: 'center' },
+  hintBannerContainer: { position: 'absolute', top: 120, left: 0, right: 0, alignItems: 'center', zIndex: 10 },
+  hintBanner: { backgroundColor: 'rgba(15,23,42,0.85)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 24, flexDirection: 'row', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 6 },
+  hintBannerText: { color: '#fff', fontSize: 14, fontWeight: '700' },
 
   // New styles for Map controls & markers
   mapControls: { position: 'absolute', right: 16, gap: 12, alignItems: 'center' },
