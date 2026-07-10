@@ -29,6 +29,38 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
 
+  const mapAuthErrorMessage = (rawError: any, registering: boolean) => {
+    const raw = (rawError?.message || rawError?.toString?.() || '').toLowerCase();
+
+    if (!raw) {
+      return registering ? texts.registerFailed : texts.loginFailed;
+    }
+
+    if (raw.includes('invalid login credentials')) {
+      return 'Email hoặc mật khẩu không đúng. Nếu chưa có tài khoản, hãy bấm Đăng ký ngay.';
+    }
+    if (raw.includes('email not confirmed')) {
+      return 'Email chưa được xác nhận. Vui lòng kiểm tra hộp thư và xác nhận tài khoản.';
+    }
+    if (raw.includes('user already registered') || raw.includes('already registered')) {
+      return 'Email này đã được đăng ký. Hãy đăng nhập hoặc dùng email khác.';
+    }
+    if (raw.includes('password should be at least')) {
+      return texts.passwordTooShort;
+    }
+    if (raw.includes('invalid email')) {
+      return 'Định dạng email không hợp lệ.';
+    }
+    if (raw.includes('network request failed') || raw.includes('failed to fetch')) {
+      return 'Không thể kết nối máy chủ. Vui lòng kiểm tra mạng và thử lại.';
+    }
+    if (raw.includes('internal server error') || raw.includes('{"type":"default"')) {
+      return 'Lỗi máy chủ (Internal Server Error). Vui lòng thử lại sau.';
+    }
+
+    return rawError?.message || (registering ? texts.registerFailed : texts.loginFailed);
+  };
+
   const [request, response, promptAsync] = Google.useAuthRequest({
     webClientId: process.env.EXPO_PUBLIC_WEB_CLIENT_ID,
     iosClientId: process.env.EXPO_PUBLIC_IOS_CLIENT_ID,
@@ -42,6 +74,50 @@ export default function LoginScreen() {
       full_name: name || user.user_metadata?.full_name || user.email?.split('@')[0],
       avatar: user.user_metadata?.avatar_url || user.user_metadata?.picture || null,
     }, { onConflict: 'id' });
+  };
+
+  const tryRecoverLegacyAccount = async (normalizedEmail: string, normalizedPassword: string) => {
+    try {
+      const { data: legacyUser, error: legacyError } = await supabase
+        .from('users')
+        .select('email, full_name, avatar')
+        .ilike('email', normalizedEmail)
+        .maybeSingle();
+
+      if (legacyError || !legacyUser) {
+        return { recovered: false as const };
+      }
+
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email: normalizedEmail,
+        password: normalizedPassword,
+        options: {
+          data: {
+            full_name: legacyUser.full_name || normalizedEmail.split('@')[0],
+            avatar_url: legacyUser.avatar || null,
+          },
+        },
+      });
+
+      if (signUpError) {
+        if ((signUpError.message || '').toLowerCase().includes('already registered')) {
+          return { recovered: false as const, alreadyRegistered: true as const };
+        }
+        return { recovered: false as const, reason: signUpError.message };
+      }
+
+      if (signUpData?.user) {
+        await ensureUserRecord(signUpData.user, legacyUser.full_name || normalizedEmail.split('@')[0]);
+      }
+
+      if (signUpData?.session) {
+        return { recovered: true as const, signedIn: true as const };
+      }
+
+      return { recovered: true as const, signedIn: false as const };
+    } catch (err: any) {
+      return { recovered: false as const, reason: err?.message };
+    }
   };
 
   React.useEffect(() => {
@@ -71,7 +147,10 @@ export default function LoginScreen() {
   }, [response]);
 
   const handleAuth = async () => {
-    if (!email || !password) {
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedPassword = password.trim();
+
+    if (!normalizedEmail || !normalizedPassword) {
       setErrorMsg(texts.emailPasswordRequired);
       return;
     }
@@ -96,8 +175,8 @@ export default function LoginScreen() {
     try {
       if (isRegister) {
         const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
+          email: normalizedEmail,
+          password: normalizedPassword,
           options: {
             data: { display_name: fullName.trim() }
           }
@@ -107,14 +186,27 @@ export default function LoginScreen() {
           await ensureUserRecord(data.user, fullName.trim());
         }
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password: normalizedPassword });
         if (error) throw error;
       }
     } catch (error: any) {
-      let displayError = error.message || error.toString();
-      if (displayError.includes('{"type":"default"')) {
-        displayError = 'Lỗi máy chủ (Internal Server Error). Vui lòng thử lại sau.';
+      const raw = (error?.message || error?.toString?.() || '').toLowerCase();
+
+      if (!isRegister && raw.includes('invalid login credentials')) {
+        const recoverResult = await tryRecoverLegacyAccount(normalizedEmail, normalizedPassword);
+
+        if (recoverResult.recovered && recoverResult.signedIn) {
+          setErrorMsg('Đã đồng bộ tài khoản cũ thành công. Bạn đã được đăng nhập.');
+          return;
+        }
+
+        if (recoverResult.recovered && !recoverResult.signedIn) {
+          setErrorMsg('Tài khoản cũ đã được đồng bộ. Vui lòng kiểm tra email xác nhận rồi đăng nhập lại.');
+          return;
+        }
       }
+
+      const displayError = mapAuthErrorMessage(error, isRegister);
       setErrorMsg((isRegister ? texts.registerFailed : texts.loginFailed) + ': ' + displayError);
     } finally {
       setLoading(false);

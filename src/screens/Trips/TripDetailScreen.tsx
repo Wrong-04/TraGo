@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, ImageBackground, Dimensions, ActivityIndicator, TouchableOpacity, Image } from 'react-native';
+import { View, StyleSheet, ScrollView, ImageBackground, Dimensions, ActivityIndicator, TouchableOpacity, Image, Alert } from 'react-native';
 
 import { Text, useTheme, IconButton, Button, Portal, Modal, TextInput as PaperTextInput } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Calendar, Share2, MapPin, Navigation, DollarSign, BookOpen, Clock, Settings } from 'lucide-react-native';
+import { Calendar, Share2, MapPin, Navigation, DollarSign, BookOpen, Clock, Settings, Trash2 } from 'lucide-react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../../features/store';
 import { fetchTripDetailData, clearTripDetail } from '../../features/trips/tripDetailSlice';
 import { TripActivity, TripDay } from '../../features/trips/tripsSlice';
+import { fetchTrips } from '../../features/trips/tripsSlice';
+import { fetchGallery } from '../../features/gallery/gallerySlice';
 import { translations } from '../../constants/translations';
 import { LinearGradient } from 'expo-linear-gradient';
 import MapView, { Marker, Polyline } from 'react-native-maps';
@@ -26,9 +28,11 @@ export default function TripDetailScreen({ navigation, route }: any) {
   const dispatch = useDispatch<AppDispatch>();
   
   const trip = route.params?.trip;
+  const user = useSelector((state: RootState) => state.auth.user);
   const settings = useSelector((state: RootState) => state.settings);
   const { locations, gallery, journals, expenses, isLoading } = useSelector((state: RootState) => state.tripDetail);
   const texts = translations[settings.language].tripDetail;
+  const tripTexts = translations[settings.language].trips;
 
   useEffect(() => {
     if (trip?.id) {
@@ -39,11 +43,113 @@ export default function TripDetailScreen({ navigation, route }: any) {
     };
   }, [dispatch, trip?.id]);
 
+  useEffect(() => {
+    setItineraryData(Array.isArray(trip?.itinerary) ? trip.itinerary : []);
+  }, [trip?.id, trip?.itinerary]);
+
+  const persistItinerary = async (nextItinerary: TripDay[]) => {
+    if (!trip?.id) return;
+
+    const totalCostFromItinerary = nextItinerary.reduce((sum, day) => {
+      const dayCost = Number((day as any)?.estimatedCost || 0);
+      if (dayCost > 0) return sum + dayCost;
+      return sum + (day.activities || []).reduce((aSum, act) => aSum + Number((act as any)?.estimatedCost || 0), 0);
+    }, 0);
+
+    await supabase
+      .from('trips')
+      .update({ itinerary: nextItinerary, total_cost: totalCostFromItinerary })
+      .eq('id', trip.id);
+  };
+
+  const handleAddItineraryItem = async () => {
+    const dayNumber = Math.max(1, parseInt(newItemDay || '1', 10));
+    if (!newItemDescription.trim() || !newItemLocation.trim()) return;
+
+    const next = [...itineraryData];
+    const targetIndex = next.findIndex((d) => d.day === dayNumber);
+    const newActivity: TripActivity = {
+      time: newItemTime || '08:30',
+      location: newItemLocation.trim(),
+      description: newItemDescription.trim(),
+      estimatedCost: Math.max(0, parseInt(newItemCost.replace(/\D/g, '') || '0', 10)),
+    };
+
+    if (targetIndex >= 0) {
+      const currentActivities = Array.isArray(next[targetIndex].activities) ? next[targetIndex].activities : [];
+      next[targetIndex] = {
+        ...next[targetIndex],
+        activities: [...currentActivities, newActivity],
+      };
+    } else {
+      next.push({
+        day: dayNumber,
+        theme: `Lịch trình người dùng tạo - Ngày ${dayNumber}`,
+        activities: [newActivity],
+      });
+    }
+
+    next.sort((a, b) => a.day - b.day);
+    setSavingItinerary(true);
+    try {
+      await persistItinerary(next);
+      setItineraryData(next);
+      setItineraryModalVisible(false);
+      setNewItemDay('1');
+      setNewItemTime('08:30');
+      setNewItemLocation('');
+      setNewItemDescription('');
+      setNewItemCost('');
+      dispatch(fetchTrips(user?.uid));
+    } finally {
+      setSavingItinerary(false);
+    }
+  };
+
+  const handleDeleteItineraryActivity = async (day: number, activityIndex: number) => {
+    const next = itineraryData
+      .map((d) => {
+        if (d.day !== day) return d;
+        const acts = (d.activities || []).filter((_, idx) => idx !== activityIndex);
+        return { ...d, activities: acts };
+      })
+      .filter((d) => (d.activities || []).length > 0);
+
+    setSavingItinerary(true);
+    try {
+      await persistItinerary(next);
+      setItineraryData(next);
+      dispatch(fetchTrips(user?.uid));
+    } finally {
+      setSavingItinerary(false);
+    }
+  };
+
+  const handleDeleteItineraryDay = async (day: number) => {
+    const next = itineraryData.filter((d) => d.day !== day);
+    setSavingItinerary(true);
+    try {
+      await persistItinerary(next);
+      setItineraryData(next);
+      dispatch(fetchTrips(user?.uid));
+    } finally {
+      setSavingItinerary(false);
+    }
+  };
+
   const [activeTab, setActiveTab] = useState<'itinerary' | 'map' | 'expenses' | 'journal'>('itinerary');
   const [expenseAdvice, setExpenseAdvice] = useState('');
   const [loadingExpenseAI, setLoadingExpenseAI] = useState(false);
   const [weatherAdvice, setWeatherAdvice] = useState<string | null>(null);
   const [loadingWeatherAI, setLoadingWeatherAI] = useState(false);
+  const [itineraryData, setItineraryData] = useState<TripDay[]>(Array.isArray(trip?.itinerary) ? trip.itinerary : []);
+  const [itineraryModalVisible, setItineraryModalVisible] = useState(false);
+  const [newItemDay, setNewItemDay] = useState('1');
+  const [newItemTime, setNewItemTime] = useState('08:30');
+  const [newItemLocation, setNewItemLocation] = useState('');
+  const [newItemDescription, setNewItemDescription] = useState('');
+  const [newItemCost, setNewItemCost] = useState('');
+  const [savingItinerary, setSavingItinerary] = useState(false);
 
   // Add Expense State
   const [expenseModalVisible, setExpenseModalVisible] = useState(false);
@@ -114,7 +220,7 @@ export default function TripDetailScreen({ navigation, route }: any) {
   const [loadingJournalAI, setLoadingJournalAI] = useState(false);
   const handleJournalAdvisor = async () => {
     setLoadingJournalAI(true);
-    const aiDestinations = (trip.itinerary as TripDay[] | undefined)?.flatMap((day: TripDay) => (day.activities ?? []).map((activity: TripActivity) => activity.location || activity.description).filter(Boolean)) ?? [];
+    const aiDestinations = itineraryData.flatMap((day: TripDay) => (day.activities ?? []).map((activity: TripActivity) => activity.location || activity.description).filter(Boolean));
     const locNames = locations.map(l => l.name);
     const allPlaces = Array.from(new Set([...aiDestinations, ...locNames])).join(', ');
     
@@ -135,43 +241,127 @@ export default function TripDetailScreen({ navigation, route }: any) {
   };
 
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const handleAddPhoto = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
+  const [photoSourceModalVisible, setPhotoSourceModalVisible] = useState(false);
+  const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null);
+
+  const getStoragePathFromUrl = (url?: string) => {
+    if (!url) return null;
+
+    const marker = '/storage/v1/object/public/trago-images/';
+    const markerIndex = url.indexOf(marker);
+    if (markerIndex === -1) return null;
+
+    const rawPath = url.slice(markerIndex + marker.length);
+    return rawPath ? decodeURIComponent(rawPath) : null;
+  };
+
+  const uploadTripPhoto = async (asset: ImagePicker.ImagePickerAsset) => {
+    if (!user?.uid) return;
+
+    setUploadingPhoto(true);
+    try {
+      let finalUrl = asset.uri;
+      if (asset.base64) {
+        const dotIndex = asset.uri.lastIndexOf('.');
+        const ext = dotIndex >= 0 ? asset.uri.substring(dotIndex + 1) : 'jpg';
+        const fileName = `${user.uid}/${Date.now()}.${ext}`;
+        const { error: uploadError } = await supabase.storage
+          .from('trago-images')
+          .upload(fileName, decode(asset.base64), { contentType: `image/${ext}` });
+        if (uploadError) throw uploadError;
+        const { data } = supabase.storage.from('trago-images').getPublicUrl(fileName);
+        finalUrl = data.publicUrl;
+      }
+
+      const { error: dbError } = await supabase.from('gallery').insert([{
+        trip_id: trip.id,
+        user_id: user.uid,
+        url: finalUrl,
+      }]);
+      if (dbError) throw dbError;
+      dispatch(fetchTripDetailData(trip.id));
+      dispatch(fetchGallery(user.uid));
+    } catch (error) {
+      console.log('Error uploading photo:', error);
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
+  const openPhotoPicker = async (source: 'camera' | 'library') => {
+    setPhotoSourceModalVisible(false);
+
+    const options: ImagePicker.ImagePickerOptions = {
       mediaTypes: ['images'],
       allowsEditing: true,
       quality: 0.8,
       base64: true,
-    });
+    };
+
+    let result: ImagePicker.ImagePickerResult;
+
+    if (source === 'camera') {
+      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permissionResult.granted) {
+        return;
+      }
+      result = await ImagePicker.launchCameraAsync(options);
+    } else {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permissionResult.granted) {
+        return;
+      }
+      result = await ImagePicker.launchImageLibraryAsync(options);
+    }
 
     if (!result.canceled) {
-      const asset = result.assets[0];
-      setUploadingPhoto(true);
-      try {
-        let finalUrl = asset.uri;
-        if (asset.base64) {
-          const ext = asset.uri.substring(asset.uri.lastIndexOf('.') + 1);
-          const fileName = `${trip.user_id || 'guest'}/${Date.now()}.${ext}`;
-          const { error: uploadError } = await supabase.storage
-            .from('trago-images')
-            .upload(fileName, decode(asset.base64), { contentType: `image/${ext}` });
-          if (uploadError) throw uploadError;
-          const { data } = supabase.storage.from('trago-images').getPublicUrl(fileName);
-          finalUrl = data.publicUrl;
-        }
-
-        const { error: dbError } = await supabase.from('gallery').insert([{
-          trip_id: trip.id,
-          user_id: trip.user_id,
-          url: finalUrl,
-        }]);
-        if (dbError) throw dbError;
-        dispatch(fetchTripDetailData(trip.id));
-      } catch (error) {
-        console.log('Error uploading photo:', error);
-      } finally {
-        setUploadingPhoto(false);
-      }
+      await uploadTripPhoto(result.assets[0]);
     }
+  };
+
+  const handleAddPhoto = () => {
+    setPhotoSourceModalVisible(true);
+  };
+
+  const deleteTripPhoto = async (photo: any) => {
+    if (!user?.uid || !photo?.id) return;
+
+    setDeletingPhotoId(photo.id);
+    try {
+      const storagePath = getStoragePathFromUrl(photo.image || photo.url);
+      if (storagePath) {
+        const { error: storageError } = await supabase.storage.from('trago-images').remove([storagePath]);
+        if (storageError) {
+          console.log('Storage delete warning:', storageError);
+        }
+      }
+
+      const { error: dbError } = await supabase
+        .from('gallery')
+        .delete()
+        .eq('id', photo.id)
+        .eq('user_id', user.uid);
+
+      if (dbError) throw dbError;
+
+      dispatch(fetchTripDetailData(trip.id));
+      dispatch(fetchGallery(user.uid));
+    } catch (error) {
+      console.log('Error deleting photo:', error);
+    } finally {
+      setDeletingPhotoId(null);
+    }
+  };
+
+  const handleDeletePhoto = (photo: any) => {
+    Alert.alert('Xóa ảnh', 'Bạn có chắc chắn muốn xóa ảnh này khỏi chuyến đi và thư viện?', [
+      { text: 'Hủy', style: 'cancel' },
+      {
+        text: 'Xóa',
+        style: 'destructive',
+        onPress: () => deleteTripPhoto(photo),
+      },
+    ]);
   };
   
   // --- Trip progress calculation ---
@@ -183,7 +373,7 @@ export default function TripDetailScreen({ navigation, route }: any) {
   const progressPct = Math.min(100, Math.round((daysPassed / totalDays) * 100));
 
   // These need to be computed before useMemo that references them
-  const hasItinerary = Array.isArray(trip?.itinerary) && trip.itinerary.length > 0;
+  const hasItinerary = Array.isArray(itineraryData) && itineraryData.length > 0;
   const hasLocations = locations.length > 0;
   const hasExpenses = expenses.length > 0;
   const hasJournals = journals.length > 0;
@@ -192,7 +382,7 @@ export default function TripDetailScreen({ navigation, route }: any) {
   const miniMapCoords = React.useMemo(() => {
     const coords: {latitude: number; longitude: number; name: string}[] = [];
     if (hasItinerary) {
-      (trip.itinerary as any[]).forEach((day: any) => {
+      (itineraryData as any[]).forEach((day: any) => {
         (day.activities || []).forEach((act: any) => {
           if (act.latitude && act.longitude) {
             coords.push({ latitude: act.latitude, longitude: act.longitude, name: act.location || act.description });
@@ -206,7 +396,7 @@ export default function TripDetailScreen({ navigation, route }: any) {
       }
     });
     return coords;
-  }, [trip.itinerary, locations, hasItinerary]);
+  }, [itineraryData, locations, hasItinerary]);
 
   const miniMapRegion = React.useMemo(() => {
     if (miniMapCoords.length === 0) return { latitude: 16.0544, longitude: 108.2022, latitudeDelta: 2, longitudeDelta: 2 };
@@ -232,7 +422,7 @@ export default function TripDetailScreen({ navigation, route }: any) {
   }).format(totalCost);
   const distanceValue = (trip.totalDistance || 0) * (settings.distanceUnit === 'Miles' ? 0.621371 : 1);
   const distanceUnit = settings.distanceUnit === 'Miles' ? translations[settings.language].common.miles : translations[settings.language].common.kilometers;
-  const aiDestinations = (trip.itinerary as TripDay[] | undefined)?.flatMap((day: TripDay) => (day.activities ?? []).map((activity: TripActivity) => activity.location || activity.description).filter(Boolean)) ?? [];
+  const aiDestinations = itineraryData.flatMap((day: TripDay) => (day.activities ?? []).map((activity: TripActivity) => activity.location || activity.description).filter(Boolean));
   const uniqueDestinations = Array.from(new Set(aiDestinations));
   const destinationText = uniqueDestinations.length > 0
     ? uniqueDestinations.join(', ')
@@ -251,6 +441,20 @@ export default function TripDetailScreen({ navigation, route }: any) {
         <Text style={[styles.tabText, isActive && styles.tabTextActive]}>{label}</Text>
       </TouchableOpacity>
     );
+  };
+
+  const getStatusLabel = (status?: string) => {
+    switch (status) {
+      case 'Planning':
+        return tripTexts.statusPlanning;
+      case 'Ongoing':
+        return tripTexts.statusOngoing;
+      case 'Completed':
+        return tripTexts.statusCompleted;
+      case 'Upcoming':
+      default:
+        return tripTexts.statusUpcoming;
+    }
   };
 
   return (
@@ -279,7 +483,7 @@ export default function TripDetailScreen({ navigation, route }: any) {
                 trip.status === 'Planning' ? 'rgba(245,158,11,0.7)' :
                 'rgba(59,130,246,0.7)' 
               }]}>
-                <Text style={styles.statusText}>{trip.status}</Text>
+                <Text style={styles.statusText}>{getStatusLabel(trip.status)}</Text>
               </View>
               <Text variant="headlineMedium" style={styles.headerTitle} numberOfLines={2}>
                 {trip.title}
@@ -351,6 +555,14 @@ export default function TripDetailScreen({ navigation, route }: any) {
             <View style={styles.tabContent}>
               {activeTab === 'itinerary' && (
                 <View>
+                  <View style={styles.itineraryHeaderRow}>
+                    <Text style={styles.itineraryHeaderTitle}>📌 Chi tiết lịch trình</Text>
+                    <TouchableOpacity style={styles.itineraryAddBtn} onPress={() => setItineraryModalVisible(true)} activeOpacity={0.8}>
+                      <Plus color="#4F46E5" size={14} />
+                      <Text style={styles.itineraryAddBtnText}>Thêm lịch trình</Text>
+                    </TouchableOpacity>
+                  </View>
+
                   <View style={styles.aiAdvisorBox}>
                     <Text style={styles.aiAdvisorTitle}>{texts.aiWeatherTitle}</Text>
                     {weatherAdvice ? (
@@ -369,10 +581,16 @@ export default function TripDetailScreen({ navigation, route }: any) {
                     )}
                   </View>
                   {hasItinerary ? (
-                    (trip.itinerary as TripDay[]).map((day: TripDay, index: number) => (
+                    itineraryData.map((day: TripDay, index: number) => (
                       <View key={`day-${index}`} style={styles.dayBlock}>
-                        <View style={styles.dayHeader}>
-                          <Text style={styles.dayTitle}>Ngày {day.day}</Text>
+                        <View style={styles.dayHeaderRow}>
+                          <View style={styles.dayHeader}>
+                            <Text style={styles.dayTitle}>Ngày {day.day}</Text>
+                          </View>
+                          <TouchableOpacity style={styles.itineraryDeleteDayBtn} onPress={() => handleDeleteItineraryDay(day.day)}>
+                            <Trash2 color="#EF4444" size={16} />
+                            <Text style={styles.itineraryDeleteDayText}>Xóa ngày</Text>
+                          </TouchableOpacity>
                         </View>
                         {(day.activities ?? []).map((activity: TripActivity, actIdx: number) => (
                           <View key={actIdx} style={styles.activityRow}>
@@ -388,6 +606,12 @@ export default function TripDetailScreen({ navigation, route }: any) {
                                 </View>
                               ) : null}
                             </View>
+                            <TouchableOpacity
+                              style={styles.deleteActivityBtn}
+                              onPress={() => handleDeleteItineraryActivity(day.day, actIdx)}
+                            >
+                              <Trash2 color="#EF4444" size={16} />
+                            </TouchableOpacity>
                           </View>
                         ))}
                       </View>
@@ -402,6 +626,18 @@ export default function TripDetailScreen({ navigation, route }: any) {
 
               {activeTab === 'map' && (
                 <View>
+                  <View style={styles.mapHeaderActionRow}>
+                    <Text style={styles.itineraryHeaderTitle}>🗺 Bản đồ hành trình</Text>
+                    <TouchableOpacity
+                      style={styles.itineraryAddBtn}
+                      onPress={() => navigation.navigate('MainTabs', { screen: 'MapTab', params: { trip, openAdd: true } })}
+                      activeOpacity={0.8}
+                    >
+                      <Plus color="#4F46E5" size={14} />
+                      <Text style={styles.itineraryAddBtnText}>Thêm tọa độ</Text>
+                    </TouchableOpacity>
+                  </View>
+
                   {miniMapCoords.length > 0 ? (
                     <View style={styles.miniMapContainer}>
                       <MapView
@@ -563,6 +799,18 @@ export default function TripDetailScreen({ navigation, route }: any) {
                             source={{ uri: photo.image || photo.url }}
                             style={styles.photoGridImg}
                           />
+                          <TouchableOpacity
+                            style={styles.photoDeleteBtn}
+                            onPress={() => handleDeletePhoto(photo)}
+                            activeOpacity={0.85}
+                            disabled={deletingPhotoId === photo.id}
+                          >
+                            {deletingPhotoId === photo.id ? (
+                              <ActivityIndicator size={12} color="#fff" />
+                            ) : (
+                              <Trash2 color="#fff" size={14} />
+                            )}
+                          </TouchableOpacity>
                         </TouchableOpacity>
                       ))}
                     </View>
@@ -626,14 +874,111 @@ export default function TripDetailScreen({ navigation, route }: any) {
           </View>
         </Modal>
       </Portal>
+
+      <Portal>
+        <Modal
+          visible={itineraryModalVisible}
+          onDismiss={() => setItineraryModalVisible(false)}
+          contentContainerStyle={styles.expenseModal}
+        >
+          <Text style={styles.expenseModalTitle}>Thêm lịch trình thủ công</Text>
+          <PaperTextInput
+            mode="outlined"
+            label="Ngày"
+            value={newItemDay}
+            onChangeText={setNewItemDay}
+            keyboardType="number-pad"
+            style={styles.expenseInput}
+            outlineColor="#E2E8F0"
+            activeOutlineColor="#4F46E5"
+            theme={{ roundness: 12, colors: { background: '#F8FAFC' } }}
+            autoCorrect={false}
+            spellCheck={false}
+          />
+          <PaperTextInput
+            mode="outlined"
+            label="Giờ (VD: 09:00)"
+            value={newItemTime}
+            onChangeText={setNewItemTime}
+            style={styles.expenseInput}
+            outlineColor="#E2E8F0"
+            activeOutlineColor="#4F46E5"
+            theme={{ roundness: 12, colors: { background: '#F8FAFC' } }}
+            autoCorrect={false}
+            spellCheck={false}
+          />
+          <PaperTextInput
+            mode="outlined"
+            label="Tên địa danh"
+            value={newItemLocation}
+            onChangeText={setNewItemLocation}
+            style={styles.expenseInput}
+            outlineColor="#E2E8F0"
+            activeOutlineColor="#4F46E5"
+            theme={{ roundness: 12, colors: { background: '#F8FAFC' } }}
+            autoCorrect={false}
+            spellCheck={false}
+          />
+          <PaperTextInput
+            mode="outlined"
+            label="Mô tả hoạt động"
+            value={newItemDescription}
+            onChangeText={setNewItemDescription}
+            style={styles.expenseInput}
+            outlineColor="#E2E8F0"
+            activeOutlineColor="#4F46E5"
+            theme={{ roundness: 12, colors: { background: '#F8FAFC' } }}
+            autoCorrect={false}
+            spellCheck={false}
+          />
+          <PaperTextInput
+            mode="outlined"
+            label="Chi phí dự kiến (VND)"
+            value={newItemCost}
+            onChangeText={setNewItemCost}
+            keyboardType="numeric"
+            style={styles.expenseInput}
+            outlineColor="#E2E8F0"
+            activeOutlineColor="#4F46E5"
+            theme={{ roundness: 12, colors: { background: '#F8FAFC' } }}
+            autoCorrect={false}
+            spellCheck={false}
+          />
+          <View style={styles.expenseModalActions}>
+            <Button mode="text" onPress={() => setItineraryModalVisible(false)} textColor="#64748B" style={{ flex: 1 }}>Hủy</Button>
+            <Button mode="contained" onPress={handleAddItineraryItem} loading={savingItinerary} disabled={savingItinerary} buttonColor="#4F46E5" style={{ flex: 1, borderRadius: 12 }}>Lưu</Button>
+          </View>
+        </Modal>
+      </Portal>
+
+      <Portal>
+        <Modal
+          visible={photoSourceModalVisible}
+          onDismiss={() => setPhotoSourceModalVisible(false)}
+          contentContainerStyle={styles.expenseModal}
+        >
+          <Text style={styles.expenseModalTitle}>Thêm ảnh chuyến đi</Text>
+          <TouchableOpacity style={styles.photoSourceOption} activeOpacity={0.8} onPress={() => openPhotoPicker('camera')}>
+            <Text style={styles.photoSourceOptionTitle}>Chụp ảnh bằng camera</Text>
+            <Text style={styles.photoSourceOptionText}>Mở camera để chụp khoảnh khắc mới</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.photoSourceOption} activeOpacity={0.8} onPress={() => openPhotoPicker('library')}>
+            <Text style={styles.photoSourceOptionTitle}>Chọn từ thư viện</Text>
+            <Text style={styles.photoSourceOptionText}>Thêm ảnh đã có trong máy vào chuyến đi</Text>
+          </TouchableOpacity>
+          <View style={styles.expenseModalActions}>
+            <Button mode="text" onPress={() => setPhotoSourceModalVisible(false)} textColor="#64748B" style={{ flex: 1 }}>Đóng</Button>
+          </View>
+        </Modal>
+      </Portal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  headerImage: { width: width, height: 340 },
-  headerOverlay: { flex: 1, justifyContent: 'space-between', paddingBottom: 24 },
+  headerImage: { width: width, height: 360 },
+  headerOverlay: { flex: 1, justifyContent: 'space-between', paddingBottom: 52 },
   appBar: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16 },
   iconBtn: { 
     width: 40, height: 40, borderRadius: 20, 
@@ -658,7 +1003,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 32, 
     borderTopRightRadius: 32, 
     backgroundColor: '#F8FAFC', 
-    marginTop: -32, 
+    marginTop: -16, 
     paddingTop: 24, 
     paddingHorizontal: 20 
   },
@@ -718,7 +1063,44 @@ const styles = StyleSheet.create({
   tabText: { color: '#64748B', fontWeight: '600', marginLeft: 8 },
   tabTextActive: { color: '#FFFFFF' },
   tabContent: { marginBottom: 24 },
+  itineraryHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  mapHeaderActionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  itineraryHeaderTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  itineraryAddBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#EEF2FF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  itineraryAddBtnText: {
+    color: '#4F46E5',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   dayBlock: { marginBottom: 24 },
+  dayHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
   dayHeader: {
     backgroundColor: '#E0E7FF',
     alignSelf: 'flex-start',
@@ -728,6 +1110,20 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   dayTitle: { fontWeight: 'bold', color: '#4F46E5', fontSize: 14 },
+  itineraryDeleteDayBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FEF2F2',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+  },
+  itineraryDeleteDayText: {
+    color: '#EF4444',
+    fontSize: 11,
+    fontWeight: '700',
+  },
   activityRow: { 
     flexDirection: 'row', 
     marginBottom: 16,
@@ -746,6 +1142,16 @@ const styles = StyleSheet.create({
   activityDescription: { color: '#0F172A', fontSize: 15, fontWeight: '600', lineHeight: 22 },
   activityLocationRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
   activityLocation: { color: '#64748B', fontSize: 13, marginLeft: 4 },
+  deleteActivityBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#FEF2F2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 10,
+    marginTop: 2,
+  },
   expenseSection: { gap: 12 },
   expenseItem: { 
     flexDirection: 'row', 
@@ -921,10 +1327,22 @@ const styles = StyleSheet.create({
     aspectRatio: 1,
     borderRadius: 12,
     overflow: 'hidden',
+    position: 'relative',
   },
   photoGridImg: {
     width: '100%',
     height: '100%',
+  },
+  photoDeleteBtn: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(239,68,68,0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   expenseSectionHeader: {
     flexDirection: 'row',
@@ -974,5 +1392,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     marginTop: 8,
+  },
+  photoSourceOption: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  photoSourceOptionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 6,
+  },
+  photoSourceOptionText: {
+    fontSize: 13,
+    color: '#64748B',
+    lineHeight: 19,
   },
 });

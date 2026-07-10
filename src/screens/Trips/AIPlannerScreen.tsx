@@ -44,6 +44,7 @@ export default function AIPlannerScreen({ navigation }: any) {
   const [destination, setDestination] = useState('');
   const [days, setDays] = useState(3);
   const [budget, setBudget] = useState('5000000');
+  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [stylesList, setStylesList] = useState<string[]>(['relax', 'food']);
   const [groupSize, setGroupSize] = useState(2);
   const [specialNote, setSpecialNote] = useState('');
@@ -55,6 +56,30 @@ export default function AIPlannerScreen({ navigation }: any) {
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
+
+  const parseBudget = (value: string) => {
+    const numeric = Number(String(value || '').replace(/[^\d]/g, ''));
+    return Number.isFinite(numeric) ? Math.max(0, Math.round(numeric)) : 0;
+  };
+
+  const toDateOnly = (value: Date) => value.toISOString().split('T')[0];
+
+  const toDateFromDayOffset = (baseDate: string, offset: number) => {
+    const d = new Date(baseDate);
+    d.setDate(d.getDate() + offset);
+    return toDateOnly(d);
+  };
+
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const haversineKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) ** 2
+      + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
 
   // ─── ACTIONS ────────────────────────────────────────────────────────────────
   const toggleStyle = (id: string) => {
@@ -91,10 +116,13 @@ export default function AIPlannerScreen({ navigation }: any) {
     const stopLoading = startLoading();
     try {
       const interests = stylesList.map(id => TRAVEL_STYLES.find(s => s.id === id)?.label || id);
+      interests.push(`Số người: ${groupSize}`);
+      interests.push(`Ngày bắt đầu: ${startDate}`);
       if (specialNote.trim()) interests.push(`Lưu ý: ${specialNote.trim()}`);
       
       const result = await generateTripPlan(destination, days, budget, interests);
       setGeneratedPlan(result);
+      setSelectedDay(result?.days?.[0]?.day || 1);
       
       Animated.timing(fadeAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => {
         setScreen('preview');
@@ -112,24 +140,140 @@ export default function AIPlannerScreen({ navigation }: any) {
     if (!generatedPlan || !user) return;
     setSaving(true);
     try {
+      const itinerary = Array.isArray(generatedPlan.days) ? generatedPlan.days : [];
+      const allStops = itinerary.flatMap((day: any) =>
+        (day.activities || []).map((act: any, index: number) => ({
+          day: day.day,
+          orderIndex: index,
+          name: act.location || act.description,
+          description: act.description || '',
+          time: act.time || null,
+          latitude: Number(act.latitude),
+          longitude: Number(act.longitude),
+          estimatedCost: Number(act.estimatedCost || 0),
+          category: day.theme || 'AI Plan',
+        }))
+      ).filter((item: any) => Number.isFinite(item.latitude) && Number.isFinite(item.longitude));
+
+      let totalDistance = 0;
+      for (let i = 1; i < allStops.length; i += 1) {
+        totalDistance += haversineKm(
+          allStops[i - 1].latitude,
+          allStops[i - 1].longitude,
+          allStops[i].latitude,
+          allStops[i].longitude
+        );
+      }
+
+      const totalEstimatedCost = itinerary.reduce((sum: number, day: any) => {
+        const dayCost = Number(day?.estimatedCost || 0);
+        if (dayCost > 0) return sum + dayCost;
+        return sum + (day?.activities || []).reduce((actSum: number, act: any) => actSum + Number(act?.estimatedCost || 0), 0);
+      }, 0);
+
+      const startDateValue = startDate;
+      const endDateValue = toDateFromDayOffset(startDateValue, Math.max(0, days - 1));
+
       const newTrip = {
         user_id: user.uid,
         title: generatedPlan.title || `Khám phá ${destination}`,
         description: generatedPlan.summary || 'Lịch trình được tạo bởi AI',
         country: 'Việt Nam',
         city: destination,
-        start_date: new Date().toISOString().split('T')[0],
-        end_date: new Date(Date.now() + days * 86400000).toISOString().split('T')[0],
-        budget: parseInt(budget),
-        total_distance: Math.floor(Math.random() * 500) + 50,
-        total_cost: 0,
+        start_date: startDateValue,
+        end_date: endDateValue,
+        budget: parseBudget(budget),
+        total_distance: Number(totalDistance.toFixed(2)),
+        total_cost: totalEstimatedCost,
         status: 'Upcoming',
         cover_image: `https://picsum.photos/seed/${destination}/800/600`,
-        itinerary: generatedPlan.days || []
+        itinerary,
+        latitude: allStops[0]?.latitude || null,
+        longitude: allStops[0]?.longitude || null,
+        address: destination,
+        tags: stylesList.map(id => TRAVEL_STYLES.find(s => s.id === id)?.label || id),
       };
 
-      const { error } = await supabase.from('trips').insert([newTrip]);
+      const { data: insertedTrip, error } = await supabase.from('trips').insert([newTrip]).select().single();
       if (error) throw error;
+
+      if (insertedTrip?.id && allStops.length > 0) {
+        const locationPayload = allStops.map((stop: any, index: number) => {
+          const prev = index > 0 ? allStops[index - 1] : null;
+          const distance = prev
+            ? haversineKm(prev.latitude, prev.longitude, stop.latitude, stop.longitude)
+            : 0;
+          return {
+            trip_id: insertedTrip.id,
+            name: stop.name,
+            address: stop.name,
+            latitude: stop.latitude,
+            longitude: stop.longitude,
+            category: stop.category,
+            is_favorite: false,
+            visit_date: toDateFromDayOffset(startDateValue, Math.max(0, Number(stop.day || 1) - 1)),
+            visit_time: stop.time,
+            estimated_cost: Math.max(0, Math.round(stop.estimatedCost || 0)),
+            rating: 5,
+            mood: null,
+            weather: null,
+            review: stop.description,
+            image: null,
+            distance_from_previous: Number(distance.toFixed(2)),
+            travel_time_minutes: Math.round((distance / 30) * 60),
+          };
+        });
+
+        const { error: locationError } = await supabase.from('trip_locations').insert(locationPayload);
+        if (locationError) {
+          console.log('Location save warning:', locationError);
+        }
+      }
+
+      if (insertedTrip?.id) {
+        const expenseRowsFromActivities = itinerary.flatMap((day: any) => {
+          const visitDate = toDateFromDayOffset(startDateValue, Math.max(0, Number(day?.day || 1) - 1));
+          return (day?.activities || [])
+            .map((act: any) => {
+              const amount = Math.max(0, Math.round(Number(act?.estimatedCost || 0)));
+              if (amount <= 0) return null;
+              const time = String(act?.time || '').trim();
+              const locationName = String(act?.location || '').trim();
+              const desc = String(act?.description || '').trim();
+              const titleBase = locationName || desc || `Hoạt động ngày ${day?.day || 1}`;
+              const title = time ? `${time} - ${titleBase}` : titleBase;
+              return {
+                trip_id: insertedTrip.id,
+                amount,
+                name: title.slice(0, 120),
+                expense_date: visitDate,
+              };
+            })
+            .filter(Boolean);
+        });
+
+        const expenseRows = expenseRowsFromActivities.length > 0
+          ? expenseRowsFromActivities
+          : itinerary
+              .map((day: any) => {
+                const amount = Math.max(0, Math.round(Number(day?.estimatedCost || 0)));
+                if (amount <= 0) return null;
+                return {
+                  trip_id: insertedTrip.id,
+                  amount,
+                  name: `Chi phí ngày ${day?.day || 1}`,
+                  expense_date: toDateFromDayOffset(startDateValue, Math.max(0, Number(day?.day || 1) - 1)),
+                };
+              })
+              .filter(Boolean);
+
+        if (expenseRows.length > 0) {
+          const { error: expenseError } = await supabase.from('trip_expenses').insert(expenseRows as any[]);
+          if (expenseError) {
+            console.log('Expense save warning:', expenseError);
+          }
+        }
+      }
       
       dispatch(fetchTrips(user.uid));
       navigation.goBack();
@@ -181,6 +325,52 @@ export default function AIPlannerScreen({ navigation }: any) {
               onChangeText={setBudget}
             />
           </View>
+        </View>
+      </View>
+
+      <View style={styles.row}>
+        <View style={[styles.formSection, { flex: 1, marginRight: 8 }]}>
+          <Text style={styles.fieldLabel}>📅 Ngày bắt đầu</Text>
+          <View style={styles.inputWrap}>
+            <Calendar color="#94A3B8" size={20} />
+            <TextInput
+              style={styles.textInput}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor="#94A3B8"
+              value={startDate}
+              onChangeText={setStartDate}
+            />
+          </View>
+        </View>
+        <View style={[styles.formSection, { flex: 1, marginLeft: 8 }]}>
+          <Text style={styles.fieldLabel}>👥 Số người</Text>
+          <View style={styles.inputWrap}>
+            <Users color="#94A3B8" size={20} />
+            <TextInput
+              style={styles.textInput}
+              keyboardType="number-pad"
+              value={String(groupSize)}
+              onChangeText={(t) => {
+                const n = Number(t);
+                setGroupSize(Number.isFinite(n) && n > 0 ? n : 1);
+              }}
+            />
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.formSection}>
+        <Text style={styles.fieldLabel}>📝 Lưu ý thêm cho AI</Text>
+        <View style={[styles.inputWrap, { height: 88, alignItems: 'flex-start', paddingTop: 12 }] }>
+          <TextInput
+            style={[styles.textInput, { marginLeft: 0, height: '100%', textAlignVertical: 'top' }]}
+            multiline
+            numberOfLines={3}
+            placeholder="Ví dụ: ưu tiên đi bộ, không ăn cay, thích điểm sống ảo..."
+            placeholderTextColor="#94A3B8"
+            value={specialNote}
+            onChangeText={setSpecialNote}
+          />
         </View>
       </View>
 
@@ -241,7 +431,7 @@ export default function AIPlannerScreen({ navigation }: any) {
   };
 
   const renderPreview = () => {
-    const totalEst = generatedPlan?.budget || parseInt(budget) || 0;
+    const totalEst = generatedPlan?.totalEstimatedCost || parseBudget(budget) || 0;
     const totalActs = generatedPlan?.days?.reduce((sum: number, d: any) => sum + (d.activities?.length || 0), 0) || 0;
 
     return (
@@ -293,6 +483,7 @@ export default function AIPlannerScreen({ navigation }: any) {
               <View style={styles.dayHeadInfo}>
                 <Text style={styles.dayTitle}>Ngày {day.day}</Text>
                 {day.theme && <Text style={styles.dayTheme}>{day.theme}</Text>}
+                <Text style={styles.dayBudget}>Dự trù ngày: {(Number(day?.estimatedCost || 0)).toLocaleString('vi-VN')}đ</Text>
               </View>
             </View>
 
@@ -427,6 +618,7 @@ const styles = StyleSheet.create({
   dayHeadInfo: { flex: 1 },
   dayTitle: { fontSize: 16, fontWeight: '800', color: '#0F172A' },
   dayTheme: { fontSize: 13, color: '#64748B', marginTop: 4 },
+  dayBudget: { fontSize: 13, color: '#10B981', marginTop: 6, fontWeight: '700' },
 
   actsWrap: { marginTop: 20, paddingTop: 20, borderTopWidth: 1, borderTopColor: '#F1F5F9' },
   actRow: { flexDirection: 'row', marginBottom: 20 },

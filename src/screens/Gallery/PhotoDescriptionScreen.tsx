@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { 
-  View, StyleSheet, ScrollView, TouchableOpacity, Image, Clipboard, Share, 
-  Dimensions, ActivityIndicator, KeyboardAvoidingView, Platform 
+import {
+  View, StyleSheet, ScrollView, TouchableOpacity, Image, Clipboard, Share,
+  Dimensions, ActivityIndicator, KeyboardAvoidingView, Platform
 } from 'react-native';
 import { Text, TextInput, Snackbar } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -38,7 +38,7 @@ export default function PhotoDescriptionScreen({ route, navigation }: any) {
         const result = await FileSystem.downloadAsync(imageUri, fileUri);
         localUri = result.uri;
       }
-      
+
       // Nén ảnh để tránh lỗi tràn RAM (Văng App)
       const manipResult = await ImageManipulator.manipulateAsync(
         localUri,
@@ -48,7 +48,7 @@ export default function PhotoDescriptionScreen({ route, navigation }: any) {
 
       const base64Image = await FileSystem.readAsStringAsync(manipResult.uri, { encoding: FileSystem.EncodingType.Base64 });
       const result = await generatePhotoDescription(base64Image, contextText.trim());
-      
+
       setDescription(result.description || '');
       setHashtags(result.hashtags || '');
     } catch (error: any) {
@@ -77,21 +77,21 @@ export default function PhotoDescriptionScreen({ route, navigation }: any) {
   };
 
   return (
-    <KeyboardAvoidingView 
-      style={styles.container} 
+    <KeyboardAvoidingView
+      style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView contentContainerStyle={{flexGrow: 1}} showsVerticalScrollIndicator={false} bounces={false}>
-        
+
         {/* ─── IMMERSIVE IMAGE VIEW ─── */}
         <View style={styles.imageContainer}>
           <Image source={{ uri: imageUri }} style={styles.fullImage} />
           <LinearGradient colors={['rgba(0,0,0,0.5)', 'transparent']} style={styles.topGradient} />
           <LinearGradient colors={['transparent', 'rgba(0,0,0,0.8)']} style={styles.bottomGradient} />
-          
+
           {/* Back Button */}
-          <TouchableOpacity 
-            style={[styles.backBtn, { top: insets.top + 10 }]} 
+          <TouchableOpacity
+            style={[styles.backBtn, { top: insets.top + 10 }]}
             onPress={() => navigation.goBack()}
           >
             <ArrowLeft color="#fff" size={24} />
@@ -117,7 +117,7 @@ export default function PhotoDescriptionScreen({ route, navigation }: any) {
         {/* ─── BOTTOM SHEET CONTENT ─── */}
         <View style={styles.bottomSheet}>
           <Text style={styles.sectionTitle}>Cảm nghĩ của bạn</Text>
-          <TextInput 
+          <TextInput
             autoCorrect={false} spellCheck={false}
             mode="outlined"
             placeholder="Bạn đang nghĩ gì về bức ảnh này? (Tuỳ chọn)"
@@ -149,7 +149,7 @@ export default function PhotoDescriptionScreen({ route, navigation }: any) {
             <View style={styles.resultBox}>
               <Text style={styles.resultDesc}>{description}</Text>
               <Text style={styles.resultTags}>{hashtags}</Text>
-              
+
               <View style={styles.resultActions}>
                 <TouchableOpacity style={styles.actionBtn} onPress={handleCopy}>
                   <Copy color="#64748B" size={18} />
@@ -179,25 +179,25 @@ const styles = StyleSheet.create({
   topGradient: { position: 'absolute', top: 0, left: 0, right: 0, height: 100 },
   bottomGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 150 },
   backBtn: { position: 'absolute', left: 16, width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'center', alignItems: 'center' },
-  
+
   floatingInfo: { position: 'absolute', bottom: 32, left: 20, right: 20, flexDirection: 'row', justifyContent: 'space-between', backgroundColor: 'rgba(255,255,255,0.15)', padding: 12, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
   infoRow: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   infoTxt: { color: '#fff', fontSize: 12, fontWeight: '600', marginLeft: 6, flexShrink: 1, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width: 0, height: 1}, textShadowRadius: 3 },
-  
+
   bottomSheet: { flex: 1, backgroundColor: '#fff', borderTopLeftRadius: 32, borderTopRightRadius: 32, marginTop: -24, padding: 24, paddingBottom: 60, shadowColor: '#000', shadowOffset: { width: 0, height: -10 }, shadowOpacity: 0.1, shadowRadius: 20, elevation: 20 },
   sectionTitle: { fontSize: 18, fontWeight: '700', color: '#0F172A', marginBottom: 12 },
   textInput: { backgroundColor: '#F8FAFC', fontSize: 15 },
-  
+
   aiBtnWrap: { marginTop: 24, borderRadius: 16, overflow: 'hidden', shadowColor: '#EC4899', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 8 },
   aiBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16 },
   aiBtnTxt: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  
+
   resultBox: { marginTop: 24, backgroundColor: '#F8FAFC', borderRadius: 20, padding: 20, borderWidth: 1, borderColor: '#F1F5F9' },
   resultDesc: { fontSize: 15, color: '#334155', lineHeight: 24, marginBottom: 12 },
   resultTags: { fontSize: 14, color: '#8B5CF6', fontWeight: '500', marginBottom: 20 },
   resultActions: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#E2E8F0', paddingTop: 16 },
   actionBtn: { flexDirection: 'row', alignItems: 'center', marginRight: 24, paddingVertical: 4 },
   actionTxt: { fontSize: 14, fontWeight: '600', color: '#64748B', marginLeft: 8 },
-  
+
   snackbar: { backgroundColor: '#334155', borderRadius: 12 },
 });

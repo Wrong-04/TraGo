@@ -48,6 +48,7 @@ export interface Journal {
 export interface Expense {
   id: string;
   trip_id: string;
+  name?: string;
   category: string;
   amount: number;
   description?: string;
@@ -102,6 +103,11 @@ const initialState: TripDetailState = {
   error: null,
 };
 
+const getExpenseLabel = (expense: any) => {
+  const value = (expense?.name || expense?.note || expense?.category || expense?.description || '').toString().trim();
+  return value || 'Khoản chi phát sinh';
+};
+
 // ─── Thunks ───────────────────────────────────────────────────────────────────
 export const fetchTripDetailData = createAsyncThunk(
   'tripDetail/fetchData',
@@ -125,9 +131,10 @@ export const fetchTripDetailData = createAsyncThunk(
       const expenses = (expRes.data || []).map((e: any) => ({
         id: e.id,
         trip_id: e.trip_id,
-        category: e.note || e.category || 'other',
+        name: getExpenseLabel(e),
+        category: (e.category || '').toString().trim() || getExpenseLabel(e),
         amount: e.amount,
-        description: e.name || e.description || '',
+        description: (e.description || e.note || '').toString().trim() || getExpenseLabel(e),
         date: e.expense_date || e.date || '',
       })) as Expense[];
       const aiSummary = (aiRes.data?.[0] || null) as AIPlan | null;

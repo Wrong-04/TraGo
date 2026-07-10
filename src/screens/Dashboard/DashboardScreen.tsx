@@ -20,6 +20,7 @@ export default function DashboardScreen({ navigation }: any) {
   const settings = useSelector((state: RootState) => state.settings);
   const { items } = useSelector((state: RootState) => state.trips);
   const texts = translations[settings.language].dashboard;
+  const tripTexts = translations[settings.language].trips;
   const commonTexts = translations[settings.language].common;
 
   const [totalLocations, setTotalLocations] = useState(0);
@@ -62,18 +63,45 @@ export default function DashboardScreen({ navigation }: any) {
   const totalDistanceUnit = settings.distanceUnit === 'Miles' ? commonTexts.miles : commonTexts.kilometers;
   const recentTrip = items.length > 0 ? items[0] : null;
 
+  const formatDistance = (value?: number) => {
+    const distance = (value || 0) * (settings.distanceUnit === 'Miles' ? 0.621371 : 1);
+    return `${distance.toFixed(2)} ${totalDistanceUnit}`;
+  };
+
+  const getStatusLabel = (status?: string) => {
+    switch (status) {
+      case 'Planning':
+        return tripTexts.statusPlanning;
+      case 'Ongoing':
+        return tripTexts.statusOngoing;
+      case 'Completed':
+        return tripTexts.statusCompleted;
+      case 'Upcoming':
+      default:
+        return tripTexts.statusUpcoming;
+    }
+  };
+
+  const getTripDays = (startDate?: string, endDate?: string) => {
+    if (!startDate || !endDate) return 0;
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const diff = Math.abs(end.getTime() - start.getTime());
+    return Math.ceil(diff / (1000 * 60 * 60 * 24)) + 1;
+  };
+
   return (
-    <ScrollView 
-      style={[styles.container, { backgroundColor: theme.colors.background }]} 
+    <ScrollView
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
       showsVerticalScrollIndicator={false}
       contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: 40 }}
     >
       <View style={styles.header}>
         <View style={styles.headerText}>
-          <Text variant="headlineSmall" style={[styles.greeting, { color: theme.colors.onSurface }]}> 
+          <Text variant="headlineSmall" style={[styles.greeting, { color: theme.colors.onSurface }]}>
             {texts.greeting}, {user?.displayName?.split(' ')[0] || user?.email?.split('@')[0] || 'User'} 👋
           </Text>
-          <Text variant="bodyMedium" style={[styles.subtitle, { color: theme.colors.secondary }]}> 
+          <Text variant="bodyMedium" style={[styles.subtitle, { color: theme.colors.secondary }]}>
             {texts.subtitle}
           </Text>
         </View>
@@ -109,7 +137,7 @@ export default function DashboardScreen({ navigation }: any) {
                <ChevronRight color="#EA580C" size={20} />
             </View>
             <Text style={[styles.statNumber, { color: '#EA580C' }]}>
-              {totalDistance > 0 ? totalDistance.toLocaleString(settings.language === 'vi' ? 'vi-VN' : 'en-US', { maximumFractionDigits: 1 }) : '0'} 
+              {totalDistance.toLocaleString(settings.language === 'vi' ? 'vi-VN' : 'en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               <Text style={{fontSize: 14}}> {totalDistanceUnit}</Text>
             </Text>
             <Text style={styles.statLabel}>{texts.totalDistance}</Text>
@@ -133,7 +161,7 @@ export default function DashboardScreen({ navigation }: any) {
         )}
       </View>
 
-      <TouchableOpacity 
+      <TouchableOpacity
         activeOpacity={0.9}
         onPress={() => {
           if (recentTrip) {
@@ -141,13 +169,13 @@ export default function DashboardScreen({ navigation }: any) {
           } else {
             navigation.navigate('AddTrip'); // Suggest creating a trip
           }
-        }} 
+        }}
         style={styles.recentCardWrapper}
       >
         <View style={[styles.recentCard, { backgroundColor: theme.colors.surface }]}>
-          <Image 
-            source={{ uri: recentTrip?.coverImage || 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=800' }} 
-            style={styles.recentImage} 
+          <Image
+            source={{ uri: recentTrip?.coverImage || 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=800' }}
+            style={styles.recentImage}
           />
           <View style={styles.recentInfo}>
             <Text style={[styles.recentTitle, { color: theme.colors.onSurface }]} numberOfLines={1}>
@@ -156,15 +184,18 @@ export default function DashboardScreen({ navigation }: any) {
             <Text style={styles.recentDate}>
               {recentTrip ? `${recentTrip.startDate} - ${recentTrip.endDate}` : texts.recentTripHint}
             </Text>
+            <Text style={styles.recentMeta}>
+              {recentTrip ? `${getTripDays(recentTrip.startDate, recentTrip.endDate)} ${commonTexts.days} • ${formatDistance(recentTrip.totalDistance)}` : texts.recentTripHint}
+            </Text>
             <View style={styles.recentTags}>
               {recentTrip && (
                 <View style={styles.tagBadge}>
-                  <Text style={styles.tagText}>{recentTrip.totalDistance || 0} {totalDistanceUnit}</Text>
+                  <Text style={styles.tagText}>{formatDistance(recentTrip.totalDistance)}</Text>
                 </View>
               )}
               {recentTrip && recentTrip.status && (
                 <View style={[styles.tagBadge, { backgroundColor: '#E0E7FF' }]}>
-                  <Text style={[styles.tagText, { color: '#4F46E5' }]}>{recentTrip.status}</Text>
+                  <Text style={[styles.tagText, { color: '#4F46E5' }]}>{getStatusLabel(recentTrip.status)}</Text>
                 </View>
               )}
             </View>
@@ -316,6 +347,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#64748B',
     marginBottom: 12,
+  },
+  recentMeta: {
+    fontSize: 13,
+    color: '#94A3B8',
+    marginBottom: 12,
+    fontWeight: '500',
   },
   recentTags: {
     flexDirection: 'row',
