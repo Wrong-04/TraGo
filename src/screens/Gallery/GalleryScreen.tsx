@@ -105,7 +105,12 @@ export default function GalleryScreen({ navigation }: any) {
         numColumns={2}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <Image source={{ uri: item.image }} style={styles.image} />
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => navigation.navigate('PhotoDescription', { imageUri: item.image })}
+          >
+            <Image source={{ uri: item.image }} style={styles.image} />
+          </TouchableOpacity>
         )}
         contentContainerStyle={styles.grid}
         showsVerticalScrollIndicator={false}

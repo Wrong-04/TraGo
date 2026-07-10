@@ -6,19 +6,134 @@ const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || "";
 // Initialize the Gemini API
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
-const GEMINI_MODEL_CANDIDATES = [
-  "gemini-1.5-flash",
-  "gemini-1.5-pro",
+const DEFAULT_GEMINI_MODEL_PREFERENCES = [
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-lite",
   "gemini-2.0-flash",
+  "gemini-1.5-flash-latest",
+  "gemini-1.5-pro-latest",
 ];
 
-export const getGeminiModel = (modelName = GEMINI_MODEL_CANDIDATES[0]) => {
+const ENV_MODEL_CANDIDATES = (process.env.EXPO_PUBLIC_GEMINI_MODELS || "")
+  .split(",")
+  .map((name: string) => name.trim())
+  .filter(Boolean);
+
+const HARD_FALLBACK_MODELS = [...ENV_MODEL_CANDIDATES, ...DEFAULT_GEMINI_MODEL_PREFERENCES];
+
+type GeminiModelListResponse = {
+  models?: Array<{
+    name?: string;
+    supportedGenerationMethods?: string[];
+  }>;
+};
+
+let cachedModelCandidates: string[] | null = null;
+let cachedModelCandidatesAt = 0;
+const MODEL_CACHE_TTL_MS = 10 * 60 * 1000;
+let didWarnGeminiUnavailable = false;
+
+const getErrorMessage = (error: unknown) => {
+  return error instanceof Error ? error.message : String(error);
+};
+
+const shortenErrorMessage = (message: string, maxLength = 180) => {
+  const compact = message.replace(/\s+/g, " ").trim();
+  return compact.length > maxLength ? `${compact.slice(0, maxLength)}...` : compact;
+};
+
+export const getGeminiModel = (modelName = getInitialModelName()) => {
   return genAI.getGenerativeModel({ model: modelName });
 };
 
+const getInitialModelName = () => HARD_FALLBACK_MODELS[0] || "gemini-2.5-flash";
+
+export const getDefaultGeminiModel = () => {
+  return genAI.getGenerativeModel({ model: getInitialModelName() });
+};
+
+const listAvailableGeminiModels = async (): Promise<string[]> => {
+  if (!GEMINI_API_KEY.trim()) {
+    return [];
+  }
+
+  const now = Date.now();
+  if (cachedModelCandidates && now - cachedModelCandidatesAt < MODEL_CACHE_TTL_MS) {
+    return cachedModelCandidates;
+  }
+
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(GEMINI_API_KEY)}`
+    );
+
+    if (!response.ok) {
+      throw new Error(`List models failed with status ${response.status}`);
+    }
+
+    const data = (await response.json()) as GeminiModelListResponse;
+    const availableModels = (data.models || [])
+      .filter((model) => model.supportedGenerationMethods?.includes("generateContent"))
+      .map((model) => (model.name || "").replace(/^models\//, ""))
+      .filter(Boolean);
+
+    if (availableModels.length === 0) {
+      cachedModelCandidates = HARD_FALLBACK_MODELS;
+      cachedModelCandidatesAt = now;
+      return cachedModelCandidates;
+    }
+
+    const preferred = [...ENV_MODEL_CANDIDATES, ...DEFAULT_GEMINI_MODEL_PREFERENCES].filter((name) =>
+      availableModels.includes(name)
+    );
+
+    const ordered = [...new Set([...preferred, ...availableModels])];
+    cachedModelCandidates = ordered;
+    cachedModelCandidatesAt = now;
+    return ordered;
+  } catch (error) {
+    console.warn("Unable to list Gemini models. Using fallback model list.");
+    cachedModelCandidates = HARD_FALLBACK_MODELS;
+    cachedModelCandidatesAt = now;
+    return cachedModelCandidates;
+  }
+};
+
 const isServiceUnavailableError = (error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = getErrorMessage(error);
   return /429|quota|rate limit|exceeded|not found|unsupported|failed to fetch|service unavailable/i.test(message);
+};
+
+const isQuotaExceededError = (error: unknown) => {
+  const message = getErrorMessage(error);
+  return /429|quota exceeded|free_tier|rate limit/i.test(message);
+};
+
+const safeParseJson = <T>(text: string, fallback: T): T => {
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    const jsonBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    if (jsonBlockMatch?.[1]) {
+      try {
+        return JSON.parse(jsonBlockMatch[1]) as T;
+      } catch {
+        // Fall through to object extraction.
+      }
+    }
+
+    const firstBrace = text.indexOf("{");
+    const lastBrace = text.lastIndexOf("}");
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      try {
+        return JSON.parse(text.slice(firstBrace, lastBrace + 1)) as T;
+      } catch {
+        return fallback;
+      }
+    }
+
+    return fallback;
+  }
 };
 
 const generateWithFallback = async (prompt: string, fallbackPayload: string) => {
@@ -26,9 +141,11 @@ const generateWithFallback = async (prompt: string, fallbackPayload: string) => 
     return fallbackPayload;
   }
 
+  const modelCandidates = await listAvailableGeminiModels();
+  const modelsToTry = modelCandidates.length > 0 ? modelCandidates : HARD_FALLBACK_MODELS;
   let lastError: unknown;
 
-  for (const modelName of GEMINI_MODEL_CANDIDATES) {
+  for (const modelName of modelsToTry) {
     try {
       const model = getGeminiModel(modelName);
       const result = await model.generateContent(prompt);
@@ -36,12 +153,29 @@ const generateWithFallback = async (prompt: string, fallbackPayload: string) => 
       return response.text();
     } catch (error) {
       lastError = error;
-      console.warn(`Gemini model ${modelName} failed`, error);
+      if (isQuotaExceededError(error)) {
+        if (!didWarnGeminiUnavailable) {
+          didWarnGeminiUnavailable = true;
+          const shortReason = shortenErrorMessage(getErrorMessage(error));
+          console.warn(`Gemini quota exceeded on model ${modelName}. Using local fallback content. Reason: ${shortReason}`);
+        }
+        return fallbackPayload;
+      }
+
+      const message = getErrorMessage(error);
+      if (/404|not found|unsupported/i.test(message)) {
+        continue;
+      }
+
+      console.warn(`Gemini model ${modelName} failed: ${shortenErrorMessage(message)}`);
     }
   }
 
   if (lastError && isServiceUnavailableError(lastError)) {
-    console.warn('Gemini service unavailable, using local fallback content.');
+    if (!didWarnGeminiUnavailable) {
+      didWarnGeminiUnavailable = true;
+      console.warn("Gemini service unavailable, using local fallback content.");
+    }
     return fallbackPayload;
   }
 
@@ -107,7 +241,7 @@ export const generateTripPlan = async (destination: string, days: number, budget
   try {
     const fallbackPayload = JSON.stringify(buildFallbackTripPlan(destination, days, budget, interests));
     const text = await generateWithFallback(prompt, fallbackPayload);
-    return JSON.parse(text);
+    return safeParseJson(text, buildFallbackTripPlan(destination, days, budget, interests));
   } catch (error) {
     console.error('Lỗi khi gọi Gemini AI:', error);
     throw error;
@@ -125,7 +259,7 @@ export const generatePhotoDescription = async (imageContext: string) => {
   try {
     const fallbackPayload = JSON.stringify(buildFallbackPhotoDescription(imageContext));
     const text = await generateWithFallback(prompt, fallbackPayload);
-    return JSON.parse(text);
+    return safeParseJson(text, buildFallbackPhotoDescription(imageContext));
   } catch (error) {
     console.error('Lỗi khi gọi Gemini AI cho mô tả ảnh:', error);
     throw error;

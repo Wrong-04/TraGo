@@ -8,7 +8,7 @@ import { useSelector } from 'react-redux';
 import { RootState } from '../../features/store';
 import { translations } from '../../constants/translations';
 
-export default function PhotoDescriptionScreen({ navigation }: any) {
+export default function PhotoDescriptionScreen({ navigation, route }: any) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const settings = useSelector((state: RootState) => state.settings);
@@ -19,7 +19,7 @@ export default function PhotoDescriptionScreen({ navigation }: any) {
   const [loading, setLoading] = useState(false);
   const [snackbar, setSnackbar] = useState('');
 
-  const sampleImage = 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800';
+  const sampleImage = route?.params?.imageUri || 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800';
 
   const handleGenerate = async () => {
     if (!contextText.trim()) {

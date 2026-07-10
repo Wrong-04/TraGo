@@ -59,6 +59,14 @@ export default function DashboardScreen({ navigation }: any) {
   const totalDistanceUnit = settings.distanceUnit === 'Miles' ? commonTexts.miles : commonTexts.kilometers;
   const recentTrip = items.length > 0 ? items[0] : null;
 
+  const getTripDays = (startDate?: string, endDate?: string) => {
+    if (!startDate || !endDate) return 0;
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const diff = Math.abs(end.getTime() - start.getTime());
+    return Math.ceil(diff / (1000 * 60 * 60 * 24)) + 1;
+  };
+
   return (
     <ScrollView 
       style={[styles.container, { backgroundColor: theme.colors.background }]} 
@@ -127,7 +135,7 @@ export default function DashboardScreen({ navigation }: any) {
             {recentTrip ? `${recentTrip.startDate} - ${recentTrip.endDate}` : texts.recentTripHint}
           </Text>
           <Text style={styles.recentMeta}>
-            {recentTrip ? `${recentTrip.startDate ? '1' : '0'} ${commonTexts.days} • ${recentTrip.totalDistance || 0} ${totalDistanceUnit}` : ''}
+            {recentTrip ? `${getTripDays(recentTrip.startDate, recentTrip.endDate)} ${commonTexts.days} • ${((recentTrip.totalDistance || 0) * (settings.distanceUnit === 'Miles' ? 0.621371 : 1)).toFixed(settings.distanceUnit === 'Miles' ? 1 : 0)} ${totalDistanceUnit}` : ''}
           </Text>
         </View>
         <ChevronRight color="#94A3B8" size={24} />

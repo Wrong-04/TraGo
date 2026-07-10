@@ -344,6 +344,17 @@ export default function MapScreen({ route, navigation }: any) {
 
   const fetchAddress = async (lat: number, lng: number) => {
     try {
+      const servicesEnabled = await Location.hasServicesEnabledAsync();
+      if (!servicesEnabled) return;
+
+      const permission = await Location.getForegroundPermissionsAsync();
+      let granted = permission.granted;
+      if (!granted) {
+        const request = await Location.requestForegroundPermissionsAsync();
+        granted = request.granted;
+      }
+      if (!granted) return;
+
       const res = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
       if (res && res.length > 0) {
         const addr = `${res[0].name ? res[0].name + ', ' : ''}${res[0].street ? res[0].street + ', ' : ''}${res[0].subregion || res[0].city || ''}`;
@@ -351,7 +362,7 @@ export default function MapScreen({ route, navigation }: any) {
         if (!formName && res[0].name) setFormName(res[0].name);
       }
     } catch(e) {
-      console.log('Geocoding error', e);
+      showSnack('Không thể lấy địa chỉ tự động. Bạn có thể nhập địa chỉ thủ công.', false);
     }
   };
 

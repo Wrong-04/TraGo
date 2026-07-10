@@ -127,7 +127,7 @@ export default function TripsScreen({ navigation }: any) {
               }
             >
               <Menu.Item onPress={() => { setMenuVisibleId(null); navigation.navigate('TripDetail', { trip: item }); }} title={texts.viewDetail} />
-              <Menu.Item onPress={() => { setMenuVisibleId(null); navigation.navigate('EditTrip', { trip: item }); }} title={texts.edit} />
+              <Menu.Item onPress={() => { setMenuVisibleId(null); navigation.navigate('AddTrip', { trip: item }); }} title={texts.edit} />
               <Menu.Item onPress={() => { setMenuVisibleId(null); /* Handle Favorite */ }} title={texts.favorite} />
               <Menu.Item 
                 titleStyle={{ color: '#EF4444' }} 
