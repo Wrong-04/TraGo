@@ -312,7 +312,7 @@ export const translations: Record<LanguageCode, Translations> = {
     tripDetail: {
       distanceLabel: 'Quãng đường',
       costLabel: 'Chi phí',
-      destinationsLabel: 'Điểm đến',
+      destinationsLabel: 'Địa điểm',
       photosLabel: 'Ảnh',
       itinerary: 'Lịch trình',
       map: 'Bản đồ',
@@ -524,7 +524,7 @@ export const translations: Record<LanguageCode, Translations> = {
       tripDetail: {
         distanceLabel: 'Distance',
         costLabel: 'Cost',
-        destinationsLabel: 'Destinations',
+        destinationsLabel: 'Locations',
         photosLabel: 'Photos',
         itinerary: 'Itinerary',
         map: 'Map',

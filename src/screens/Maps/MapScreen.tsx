@@ -30,6 +30,7 @@ import * as Clipboard from 'expo-clipboard';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { fetchLocations } from '../../features/map/mapSlice';
 import { generateLocationDetails } from '../../config/gemini';
+import { recalculateTripLocations } from '../../utils/locationUtils';
 
 const { width, height } = Dimensions.get('window');
 
@@ -93,13 +94,7 @@ const formatDistance = (km: number) => {
   return km >= 1 ? `${km.toFixed(1)} km` : `${(km * 1000).toFixed(0)} m`;
 };
 
-const getDistanceFromLatLonInKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-  const R = 6371;
-  const dLat = (lat2 - lat1) * (Math.PI / 180);
-  const dLon = (lon2 - lon1) * (Math.PI / 180);
-  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
-};
+// Removed local getDistanceFromLatLonInKm
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function MapScreen({ route, navigation }: any) {
@@ -562,16 +557,6 @@ export default function MapScreen({ route, navigation }: any) {
         imageUrl = await uploadImageToSupabase(formImage);
       }
 
-      let prevDistance = 0;
-      let orderIdx = locations.length;
-      if (locations.length > 0) {
-        const lastLoc = locations[locations.length - 1];
-        prevDistance = getDistanceFromLatLonInKm(
-          lastLoc.latitude, lastLoc.longitude,
-          parseFloat(formLat), parseFloat(formLng)
-        );
-      }
-
       const payload = {
         trip_id: trip.id,
         name: formName.trim(),
@@ -595,15 +580,12 @@ export default function MapScreen({ route, navigation }: any) {
         if (error) throw error;
         showSnack('Cập nhật địa điểm thành công!');
       } else {
-        const insertPayload = {
-           ...payload,
-           distance_from_previous: prevDistance,
-           order_index: orderIdx,
-        };
-        const { error } = await supabase.from('trip_locations').insert([insertPayload]);
+        const { error } = await supabase.from('trip_locations').insert([payload]);
         if (error) throw error;
         showSnack('Đã thêm địa điểm thành công!');
       }
+      
+      await recalculateTripLocations(trip.id);
       
       await loadLocations();
 
@@ -639,6 +621,7 @@ export default function MapScreen({ route, navigation }: any) {
     try {
       const { error } = await supabase.from('trip_locations').delete().eq('id', deletingLocation.id);
       if (error) throw error;
+      await recalculateTripLocations(trip.id);
       showSnack('Đã xóa địa điểm.');
       setDeleteDialogVisible(false);
       loadLocations();

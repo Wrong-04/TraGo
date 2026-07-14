@@ -23,7 +23,7 @@ export default function DashboardScreen({ navigation }: any) {
   const tripTexts = translations[settings.language].trips;
   const commonTexts = translations[settings.language].common;
 
-  const [totalLocations, setTotalLocations] = useState(0);
+  // Removed totalLocations useState
   const [totalPhotos, setTotalPhotos] = useState(0);
 
   useEffect(() => {
@@ -41,22 +41,12 @@ export default function DashboardScreen({ navigation }: any) {
         .select('*', { count: 'exact', head: true })
         .eq('user_id', user.uid);
       setTotalPhotos(photosCount || 0);
-
-      const tripIds = items.map(t => t.id);
-      if (tripIds.length > 0) {
-        const { count: locCount } = await supabase
-          .from('trip_locations')
-          .select('*', { count: 'exact', head: true })
-          .in('trip_id', tripIds);
-        setTotalLocations(locCount || 0);
-      } else {
-        setTotalLocations(0);
-      }
     } catch (e) {
       console.log('Error fetching stats', e);
     }
   };
 
+  const totalLocations = items.reduce((sum, trip) => sum + (trip.totalLocations || 0), 0);
   const totalTrips = items.length;
   const rawDistance = items.reduce((sum, trip) => sum + (trip.totalDistance || 0), 0);
   const totalDistance = settings.distanceUnit === 'Miles' ? rawDistance * 0.621371 : rawDistance;
