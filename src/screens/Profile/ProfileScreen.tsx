@@ -15,11 +15,10 @@ export default function ProfileScreen({ navigation }: any) {
   const user = useSelector((state: RootState) => state.auth.user);
   const settings = useSelector((state: RootState) => state.settings);
   const { items } = useSelector((state: RootState) => state.trips);
-  const { locations } = useSelector((state: RootState) => state.map);
   const texts = translations[settings.language].profile;
   
   const totalTrips = items.length;
-  const totalLocations = locations.length;
+  const totalLocations = items.reduce((sum, trip) => sum + (trip.totalLocations || 0), 0);
   const totalDistance = items.reduce((sum, trip) => sum + (trip.totalDistance || 0), 0);
   const distanceValue = settings.distanceUnit === 'Miles' ? totalDistance * 0.621371 : totalDistance;
   const distanceUnit = settings.distanceUnit === 'Miles' ? translations[settings.language].common.miles : translations[settings.language].common.kilometers;

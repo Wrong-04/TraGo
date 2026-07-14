@@ -19,6 +19,7 @@ import { Sparkles, Plus } from 'lucide-react-native';
 import { supabase } from '../../config/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
+import { recalculateTripLocations } from '../../utils/locationUtils';
 
 const { width } = Dimensions.get('window');
 
@@ -294,13 +295,7 @@ export default function TripDetailScreen({ navigation, route }: any) {
     ]);
   };
 
-  const getDistanceFromLatLonInKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371;
-    const dLat = (lat2 - lat1) * (Math.PI / 180);
-    const dLon = (lon2 - lon1) * (Math.PI / 180);
-    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
-  };
+  // Removed local getDistanceFromLatLonInKm
 
   const handleDeleteLocation = async (locationId: string) => {
     Alert.alert('Xóa địa điểm', 'Bạn có chắc chắn muốn xóa địa điểm này khỏi hành trình?', [
@@ -310,29 +305,7 @@ export default function TripDetailScreen({ navigation, route }: any) {
             const { error } = await supabase.from('trip_locations').delete().eq('id', locationId);
             if (error) throw error;
             
-            const remainingLocations = locations.filter(loc => loc.id !== locationId).sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
-            
-            for (let i = 0; i < remainingLocations.length; i++) {
-              const loc = remainingLocations[i];
-              let newDist = null;
-              let newTime = loc.travel_time_minutes;
-              
-              if (i === 0) {
-                newDist = null;
-                newTime = null;
-              } else {
-                const prevLoc = remainingLocations[i - 1];
-                if (loc.latitude && loc.longitude && prevLoc.latitude && prevLoc.longitude) {
-                  newDist = getDistanceFromLatLonInKm(prevLoc.latitude, prevLoc.longitude, loc.latitude, loc.longitude);
-                }
-              }
-
-              await supabase.from('trip_locations').update({
-                order_index: i,
-                distance_from_previous: newDist,
-                travel_time_minutes: newTime
-              }).eq('id', loc.id);
-            }
+            await recalculateTripLocations(trip.id);
 
             dispatch(fetchTripDetailData(trip.id));
           } catch (e) {
@@ -627,13 +600,13 @@ export default function TripDetailScreen({ navigation, route }: any) {
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statBox}>
-              <Text style={styles.statValue}>{destinationText ? destinationText.split(',').length : locations.length}</Text>
-              <Text style={styles.statLabel}>Điểm đến</Text>
+              <Text style={styles.statValue}>{locations.length}</Text>
+              <Text style={styles.statLabel}>{texts.destinationsLabel}</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statBox}>
               <Text style={styles.statValue}>{gallery.length}</Text>
-              <Text style={styles.statLabel}>Ảnh</Text>
+              <Text style={styles.statLabel}>{texts.photosLabel}</Text>
             </View>
           </View>
 

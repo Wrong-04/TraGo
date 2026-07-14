@@ -114,7 +114,7 @@ export const fetchTripDetailData = createAsyncThunk(
   async (tripId: string, { rejectWithValue }) => {
     try {
       const [locRes, galRes, jourRes, expRes, aiRes] = await Promise.all([
-        supabase.from('trip_locations').select('*').eq('trip_id', tripId).order('visit_date', { ascending: true }),
+        supabase.from('trip_locations').select('*').eq('trip_id', tripId).order('visit_date', { ascending: true }).order('visit_time', { ascending: true }).order('created_at', { ascending: true }),
         supabase.from('gallery').select('*').eq('trip_id', tripId).order('created_at', { ascending: false }),
         supabase.from('journals').select('*').eq('trip_id', tripId).order('created_at', { ascending: false }),
         supabase.from('trip_expenses').select('*').eq('trip_id', tripId),

@@ -178,7 +178,7 @@ export default function TripsScreen({ navigation }: any) {
             </View>
             <View style={styles.metaBadge}>
               <MapPin color="#64748B" size={12} style={{ marginRight: 4 }} />
-              <Text style={styles.metaText}>{item.itinerary?.length || 0} {texts.places}</Text>
+              <Text style={styles.metaText}>{item.totalLocations || 0} {texts.places}</Text>
             </View>
           </View>
         </View>
